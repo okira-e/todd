@@ -1,0 +1,8 @@
+/target
+.idea
+.vscode
+codebook.toml
+data.json
+
+# macOS
+**/.DS_Store
