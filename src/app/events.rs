@@ -1,13 +1,9 @@
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use super::state::{Action, App, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, NavigationAction, SystemAction};
+use super::state::{Action, App, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction};
 
 
 impl App {
-    /// Reads the crossterm events and updates the state of [`App`].
-    ///
-    /// If your application needs to perform work in between handling events, you can use the
-    /// [`event::poll`] function to check if there are any events available with a timeout.
     pub fn handle_crossterm_events(&mut self) -> Result<()> {
         match event::read()? {
             // it's important to check KeyEventKind::Press to avoid handling key release events
@@ -27,11 +23,17 @@ impl App {
                 match (key.modifiers, key.code) {
                     // q, c, C
                     (_, KeyCode::Char('q')) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                        self.update(Action::System(SystemAction::Quit));
+                        self.update(Action::App(SystemAction::Quit));
                     }
                     // e
                     (_, KeyCode::Char('i')) => {
-                        self.update(Action::Navigation(NavigationAction::ToEditingScreen));
+                        self.update(Action::AppNavigation(AppNavigationAction::ToEditingScreen));
+                    }
+                    (_, KeyCode::Char('j') | KeyCode::Down) | (KeyModifiers::CONTROL, KeyCode::Char('n')) => {
+                        self.update(Action::MainView(MainViewActions::MoveDown));
+                    }
+                    (_, KeyCode::Char('k') | KeyCode::Up) | (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+                        self.update(Action::MainView(MainViewActions::MoveUp));
                     }
                     _ => { }
                 }
@@ -39,16 +41,9 @@ impl App {
             
             CurrentScreen::Editing => match (key.modifiers, key.code) {
                 (_, KeyCode::Enter) => {
-                    if let Some(currently_editing) = &self.currently_editing {
-                        match currently_editing {
-                            CurrentlyEditing::Key => {
-                                self.update(Action::Navigation(NavigationAction::ToEditingScreen));
-                            }
-                            CurrentlyEditing::Value => {
-                                self.update(Action::Editing(EditingAction::Submit));
-                                self.update(Action::Navigation(NavigationAction::ToViewingScreen));
-                            }
-                        }
+                    if !self.key_input.content().is_empty() && !self.value_input.content().is_empty() {
+                        self.update(Action::Editing(EditingAction::Submit));
+                        self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
                     }
                 }
                 
@@ -70,7 +65,7 @@ impl App {
                 }
                 
                 (_, KeyCode::Esc) => {
-                    self.update(Action::Navigation(NavigationAction::ToViewingScreen));
+                    self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
                 }
                 
                 (_, KeyCode::Tab) => {

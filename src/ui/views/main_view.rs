@@ -2,17 +2,17 @@
 // The main view.
 //
 
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Paragraph}, Frame
+    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
 };
 
-use crate::{app::state::{App, CurrentScreen, CurrentlyEditing}, ui::{helpers::get_centered_rect, widgets::text_input::TextInput}};
+use crate::{app::state::{App, CurrentScreen, CurrentlyEditing, ReportedMessageKinds}, ui::helpers::get_centered_rect};
 
 
 impl App {
-    pub fn render_main_view(&mut self, frame: &mut Frame) {
+    pub fn draw_main_view(&mut self, frame: &mut Frame) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -22,14 +22,16 @@ impl App {
             ])
             .split(frame.area());
         
-        self.render_title_widget(frame, &layout);
-        self.render_pairs_widget(frame, &layout);
-        self.render_footer_widget(frame, &layout);
+        self.draw_title_widget(frame, &layout);
+        self.draw_pairs_widget(frame, &layout);
+        self.draw_footer_widget(frame, &layout);
 
-        self.render_insert_popup_widget(frame);
+        if self.currently_editing.is_some() {
+            self.draw_insert_popup_widget(frame);
+        }
     }
 
-    fn render_pairs_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
+    fn draw_pairs_widget(&mut self, frame: &mut Frame, layout: &Rc<[Rect]>) {
         let list_widget = if self.data.len() == 0 {
             List::new(
                 vec![
@@ -42,10 +44,12 @@ impl App {
             )
         } else {
             let mut pairs = vec![];
-            self.insert_data_to_tree(&mut pairs, &self.data, 0);
+            let lines_count = self.insert_data_to_tree(&mut pairs, &self.data, 0);
+            self.lines_count = lines_count;
     
+            let focused_pair_style = Style::default().bg(Color::Green).fg(Color::Black);
             let mut list_items: Vec<ListItem> = vec![];
-            for pair in pairs {
+            for (i, pair) in pairs.into_iter().enumerate() {
                 let indentation_padding: String = (0..pair.indentation - 1).map(|_| "    ").collect();
     
                 let list_item = ListItem::new(
@@ -59,19 +63,26 @@ impl App {
                                 }
                             }
                         }
+                    )
+                    .style(
+                        if self.line_at_cursor == i { focused_pair_style } else { Style::default() },
                     ),
                 );
     
                 list_items.push(list_item);
             }
-    
+
+            
             List::new(list_items)
+                .block(
+                    Block::default().padding(Padding::horizontal(2))
+                )
         };
     
         frame.render_widget(list_widget, layout[1]);
     }
     
-    fn render_title_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
+    fn draw_title_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
         let title = Paragraph::new(Text::styled(
             "Create New Json",
             Style::default().fg(Color::Green),
@@ -81,39 +92,63 @@ impl App {
         frame.render_widget(title, layout[0]);
     }
     
-    fn render_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
-        let keymap_footer = Paragraph::new(
-            Line::from(
-                match self.current_screen {
-                    CurrentScreen::ViewingFile => Span::from(
-                        "(q) to quit / (i) to make new pair",
-                    ),
-                    CurrentScreen::Editing => Span::from(
-                        "(ESC) to cancel/(Tab) to switch boxes/enter to complete",
-                    ),
-                }
+    fn draw_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
+        // Check if we have a fresh (unexpired) message to report to the user.
+        // that message is displayed in the footer in place of the usual keymap footer.
+        let footer = if self.message_to_report.borrow().show_time.elapsed() >= self.message_to_report.borrow().show_duration {
+            Paragraph::new(
+                Line::from(
+                    match self.current_screen {
+                        CurrentScreen::ViewingFile => Span::from(
+                            "(q) to quit / (i) to make new pair",
+                        ),
+                        CurrentScreen::Editing => Span::from(
+                            "(ESC) to cancel/(Tab) to switch boxes/enter to complete",
+                        ),
+                    }
+                )
             )
-        )
-        .block(
-            Block::default().borders(Borders::ALL)
-        );
-    
+            .block(
+                Block::default().borders(Borders::ALL)
+            )
+        } else {
+            Paragraph::new(
+                Line::from(
+                    Span::from(self.message_to_report.borrow().message.clone()),
+                )
+                .style(
+                    Style::default().fg({
+                        match self.message_to_report.borrow().kind {
+                            ReportedMessageKinds::Error => Color::Red,
+                            ReportedMessageKinds::Info => Color::default(),
+                            ReportedMessageKinds::Debug => Color::Yellow,
+                            ReportedMessageKinds::Warning => Color::Yellow,
+                            ReportedMessageKinds::Success => Color::Green,
+                        }
+                    })
+                )
+            )
+            .block(
+                Block::default().borders(Borders::ALL)
+            )
+        };
+        
         let footer_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(100)])
             .split(layout[2]);
-    
-        frame.render_widget(keymap_footer, footer_layout[0]);
+        
+        frame.render_widget(footer, footer_layout[0]);
     }
     
-    fn render_insert_popup_widget(&mut self, frame: &mut Frame) {
+    fn draw_insert_popup_widget(&mut self, frame: &mut Frame) {
         let editing_popup = Block::default()
             .title("Enter a new key-value pair")
             .title_alignment(Alignment::Center)
             .borders(Borders::NONE)
             .style(Style::default());
         
-        let centered_area = get_centered_rect(50, 8, frame.area());
+        let centered_area = get_centered_rect(50, 10, frame.area());
 
         let layout = Layout::default()
             .direction(Direction::Horizontal)

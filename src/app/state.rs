@@ -1,3 +1,5 @@
+use std::{cell::RefCell, time::{Duration, Instant}};
+
 use color_eyre::Result;
 use indexmap::IndexMap;
 use ratatui::
@@ -30,14 +32,20 @@ pub struct ValuePair {
 }
 
 pub enum Action {
-    Navigation(NavigationAction),
+    AppNavigation(AppNavigationAction),
+    MainView(MainViewActions),
     Editing(EditingAction),
-    System(SystemAction),
+    App(SystemAction),
 }
 
-pub enum NavigationAction {
+pub enum AppNavigationAction {
     ToViewingScreen,
     ToEditingScreen,
+}
+
+pub enum MainViewActions{
+    MoveDown,
+    MoveUp,
 }
 
 pub enum EditingAction {
@@ -63,20 +71,42 @@ pub enum SystemAction {
     Quit,
 }
 
-/// The main application which holds the state and logic of the application.
+#[derive(Debug)]
+pub struct ReportedMessage {
+    pub message: String,
+    pub show_time: Instant,
+    pub show_duration: Duration,
+    pub kind: ReportedMessageKinds,
+}
+
+#[derive(Debug)]
+pub enum ReportedMessageKinds {
+    Error,
+    Info,
+    Debug,
+    Warning,
+    Success,
+}
+
 #[derive(Debug)]
 pub struct App {
-    running: bool,
-    // the currently being edited json key.
+    /// the currently being edited json key.
     pub key_input: TextInput,
-    // the currently being edited json value.
+    /// the currently being edited json value.
     pub value_input: TextInput,
-    // The representation of our key and value pairs with serde Serialize support
+    /// The representation of our key and value pairs with serde Serialize support
     pub data: IndexMap<String, Value>,
-    // the current screen the user is looking at, and will later determine what is rendered.
+    /// the current screen the user is looking at, and will later determine what is rendered.
     pub current_screen: CurrentScreen,
-    // the optional state containing which of the key or value pair the user is editing. It is an option, because when the user is not directly editing a key-value pair, this will be set to `None`.
+    /// the optional state containing which of the key or value pair the user is editing. It is an option, because when the user is not directly editing a key-value pair, this will be set to `None`.
     pub currently_editing: Option<CurrentlyEditing>,
+    /// Keeps track of where the current focused line is.
+    pub line_at_cursor: usize,
+    /// A temporary message to report in the UI to the user.
+    pub message_to_report: RefCell<ReportedMessage>,
+    /// The total number of lines drawn (counts nested objects).
+    pub lines_count: usize,
+    running: bool,
 }
 
 impl App {
@@ -104,17 +134,128 @@ impl App {
         return Ok(());
     }
 
-    pub fn update(&mut self, message: Action) {
-        match message {
-            Action::Navigation(nav_msg) => self.handle_navigation_messages(nav_msg),
-            Action::Editing(edit_msg) => self.handle_editing_messages(edit_msg),
-            Action::System(sys_msg) => self.handle_system_messages(sys_msg),
+    pub fn update(&mut self, action: Action) {
+        match action {
+            Action::AppNavigation(action) => self.handle_navigation_actions(action),
+            Action::MainView(action) => self.handle_main_view_messages(action),
+            Action::Editing(action) => self.handle_editing_actions(action),
+            Action::App(action) => self.handle_app_actions(action),
         }
     }
     
-    fn handle_navigation_messages(&mut self, nav_msg: NavigationAction) {
-        match nav_msg {
-            NavigationAction::ToViewingScreen => {
+    /// Inserts the from the user popup to the file/data.
+    pub fn insert_new_pair_from_input(&mut self) {
+        self.data.insert(
+            self.key_input.content().to_string(),
+            serde_json::to_value(self.value_input.content()).unwrap(),
+        );
+        
+        self.report(
+            format!("Inserted new key-value pair: {} -> {}", self.key_input.content(), self.value_input.content()),
+            ReportedMessageKinds::Success,
+            Duration::from_secs(3)
+        );
+    }
+
+    pub fn toggle_editing(&mut self) {
+        // Switch between key and value keys unless we're not on either then toggle to key.
+        match &self.currently_editing {
+            Some(edit_mode) => {
+                match edit_mode {
+                    CurrentlyEditing::Key => self.currently_editing = Some(CurrentlyEditing::Value),
+                    CurrentlyEditing::Value => self.currently_editing = Some(CurrentlyEditing::Key),
+                };
+            }
+            None => {
+                self.current_screen = CurrentScreen::Editing;
+                self.currently_editing = Some(CurrentlyEditing::Key);
+            }
+        }
+    }
+    
+    /// Set running to false to quit the application.
+    pub fn quit(&mut self) {
+        self.running = false;
+    }
+
+    pub fn insert_data_to_tree(
+        &self, 
+        pairs: &mut Vec<ValuePair>,
+        data: &IndexMap<String, Value>,
+        mut indentation_counter: usize,
+    ) -> usize {
+        indentation_counter += 1;
+        let mut lines_count = 0;
+
+        for (key, value) in data {
+            match value.is_object() {
+                false => {
+                    if value.is_array() {
+                        lines_count += 1;
+                        pairs.push(
+                            ValuePair { 
+                                indentation: indentation_counter, 
+                                key: key.clone(), 
+                                value: None,
+                                is_array_value: false,
+                            }
+                        );
+                        
+                        // Insert all values in the array at once with one more indentation level. No recursion
+                        // needed.
+                        for it in value.as_array().unwrap() {
+                            lines_count += 1;
+                            pairs.push(
+                                ValuePair {
+                                    indentation: indentation_counter + 1, 
+                                    key: serde_json::from_value(it.clone()).unwrap(), 
+                                    value: None,
+                                    is_array_value: true,
+                                }
+                            );
+                        }
+                    } else {
+                        lines_count += 1;
+                        pairs.push(
+                            ValuePair {
+                                indentation: indentation_counter, 
+                                key: key.clone(), 
+                                value: Some(serde_json::from_value(value.clone()).unwrap()),
+                                is_array_value: false,
+                            }
+                        );
+                    }
+                }
+                true => {
+                    lines_count += 1;
+                    pairs.push(
+                        ValuePair {
+                            indentation: indentation_counter, 
+                            key: key.clone(), 
+                            value: None,
+                            is_array_value: false,
+                        }
+                    );
+
+                    // Convert the `value: Value` to a HashMap.
+                    // @Improvement: Currently, the original order is being lost.
+                    let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
+                    
+                    lines_count += self.insert_data_to_tree(
+                        pairs,
+                        &new_data,
+                        indentation_counter
+                    );
+                }
+            }
+        }
+        
+        return lines_count;
+    }
+
+    fn handle_navigation_actions(&mut self, action: AppNavigationAction) {
+        match action {
+            AppNavigationAction::ToViewingScreen => {
                 self.key_input.is_focused = false;
                 self.value_input.is_focused = false;
                 self.currently_editing = None;
@@ -122,13 +263,26 @@ impl App {
                 self.value_input.clear();
                 self.current_screen = CurrentScreen::ViewingFile;
             },
-            NavigationAction::ToEditingScreen => {
+            AppNavigationAction::ToEditingScreen => {
                 self.toggle_editing();
             },
         }
     }
     
-    fn handle_editing_messages(&mut self, edit_msg: EditingAction) {
+    fn handle_main_view_messages(&mut self, action: MainViewActions) {
+        match action {
+            MainViewActions::MoveDown => {
+                if self.line_at_cursor + 1 < self.lines_count {
+                    self.line_at_cursor += 1;
+                }
+            },
+            MainViewActions::MoveUp => {
+                self.line_at_cursor = self.line_at_cursor.saturating_sub(1);
+            },
+        }
+    }
+    
+    fn handle_editing_actions(&mut self, edit_msg: EditingAction) {
         match edit_msg {
             EditingAction::SwitchToKey => {
                 self.currently_editing = Some(CurrentlyEditing::Key);
@@ -199,114 +353,12 @@ impl App {
         }
     }
 
-    fn handle_system_messages(&mut self, sys_msg: SystemAction) {
+    fn handle_app_actions(&mut self, sys_msg: SystemAction) {
         match sys_msg {
             SystemAction::Quit => {
                 self.quit();
             },
         }
-    }
-    
-    pub fn insert_new_pair_from_input(&mut self) {
-        if self.key_input.is_focused && self.value_input.is_focused {
-            // self.key & self.value inputs become None after this.
-            self.data.insert(
-                self.key_input.content().to_string(),
-                serde_json::to_value(self.value_input.content()).unwrap(),
-            );
-        }
-
-        self.currently_editing = None;
-    }
-
-    pub fn toggle_editing(&mut self) {
-        // Switch between key and value keys unless we're not on either then toggle to key.
-        match &self.currently_editing {
-            Some(edit_mode) => {
-                match edit_mode {
-                    CurrentlyEditing::Key => self.currently_editing = Some(CurrentlyEditing::Value),
-                    CurrentlyEditing::Value => self.currently_editing = Some(CurrentlyEditing::Key),
-                };
-            }
-            None => {
-                self.current_screen = CurrentScreen::Editing;
-                self.currently_editing = Some(CurrentlyEditing::Key);
-            }
-        }
-    }
-
-    /// Set running to false to quit the application.
-    pub fn quit(&mut self) {
-        self.running = false;
-    }
-
-    pub fn insert_data_to_tree(
-        &self, 
-        pairs: &mut Vec<ValuePair>,
-        data: &IndexMap<String, Value>,
-        mut indentation_counter: usize,
-    ) {
-        indentation_counter += 1;
-
-        for (key, value) in data {
-            match value.is_object() {
-                false => {
-                    if value.is_array() {
-                        pairs.push(
-                            ValuePair { 
-                                indentation: indentation_counter, 
-                                key: key.clone(), 
-                                value: None,
-                                is_array_value: false,
-                            }
-                        );
-                        
-                        // Insert all values in the array at once with one more indentation level. No recursion
-                        // needed.
-                        for it in value.as_array().unwrap() {
-                            pairs.push(
-                                ValuePair {
-                                    indentation: indentation_counter + 1, 
-                                    key: serde_json::from_value(it.clone()).unwrap(), 
-                                    value: None,
-                                    is_array_value: true,
-                                }
-                            );
-                        }
-                    } else {
-                        pairs.push(
-                            ValuePair {
-                                indentation: indentation_counter, 
-                                key: key.clone(), 
-                                value: Some(serde_json::from_value(value.clone()).unwrap()),
-                                is_array_value: false,
-                            }
-                        );
-                    }
-                }
-                true => {
-                    pairs.push(
-                        ValuePair {
-                            indentation: indentation_counter, 
-                            key: key.clone(), 
-                            value: None,
-                            is_array_value: false,
-                        }
-                    );
-
-                    // Convert the `value: Value` to a HashMap.
-                    // @Bug @Improvement: Currently, the original order is being lost.
-                    let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
-                    
-                    self.insert_data_to_tree(
-                        pairs,
-                        &new_data,
-                        indentation_counter
-                    );
-                }
-            }
-        }
-
     }
     
     fn get_focused_text_input(&mut self) -> Option<&mut TextInput> {
@@ -329,6 +381,15 @@ impl App {
         
         return None;
     }
+    
+    pub fn report(&self, message: String, kind: ReportedMessageKinds, duration: Duration) {
+        *self.message_to_report.borrow_mut() = ReportedMessage {
+            message,
+            show_time: Instant::now(),
+            show_duration: duration,
+            kind,
+        };
+    }
 }
 
 impl Default for App {
@@ -338,8 +399,16 @@ impl Default for App {
             key_input: TextInput::default(),
             value_input: TextInput::default(),
             data: IndexMap::<String, Value>::new(),
+            lines_count: 0,
+            message_to_report: RefCell::new(ReportedMessage {
+                message: "".to_string(),
+                show_time: Instant::now(),
+                kind: ReportedMessageKinds::Info,
+                show_duration: Duration::from_secs(0),
+            }),
             current_screen: CurrentScreen::ViewingFile,
             currently_editing: None,
+            line_at_cursor: 0,
         }
     }
 }
@@ -349,8 +418,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_data_to_indented_values() {
-        let app = App::default();
+    fn represent_json_in_viewer() {
+        let mut app = App::default();
         let mut pairs = vec![];
 
         let data = r#"
