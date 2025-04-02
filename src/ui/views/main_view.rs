@@ -2,7 +2,7 @@
 // The main view.
 //
 
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
@@ -148,7 +148,7 @@ impl App {
             .borders(Borders::NONE)
             .style(Style::default());
         
-        let centered_area = get_centered_rect(50, 10, frame.area());
+        let centered_area = get_centered_rect(50, 9, frame.area());
 
         let layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -166,33 +166,8 @@ impl App {
             self.key_input.is_focused = *editing == CurrentlyEditing::Key;
             self.value_input.is_focused = *editing == CurrentlyEditing::Value;
             
-            // Prepare key input
-            let key_input = self.key_input.clone()
-                .with_focus_style(Style::default().fg(Color::Yellow))
-                .block(Block::default()
-                    .title("Key")
-                    .borders(Borders::ALL)
-                    .style(if *editing == CurrentlyEditing::Key {
-                        Style::default().fg(Color::Yellow)
-                    } else {
-                        Style::default()
-                    }));
-            
-            // Prepare value input
-            let value_input = self.value_input.clone()
-                .with_focus_style(Style::default().fg(Color::Yellow))
-                .block(Block::default()
-                    .title("Value")
-                    .borders(Borders::ALL)
-                    .style(if *editing == CurrentlyEditing::Value {
-                        Style::default().fg(Color::Yellow)
-                    } else {
-                        Style::default()
-                    }));
-            
-            // Render the widgets
-            key_input.render_to_frame(frame, layout[0]);
-            value_input.render_to_frame(frame, layout[1]);
+            self.key_input.render_to_frame(frame, layout[0]);
+            self.value_input.render_to_frame(frame, layout[1]);
         }
     }
 }

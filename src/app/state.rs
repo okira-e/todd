@@ -80,6 +80,7 @@ pub struct ReportedMessage {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ReportedMessageKinds {
     Error,
     Info,
@@ -396,8 +397,8 @@ impl Default for App {
     fn default() -> Self {
         Self {
             running: false,
-            key_input: TextInput::default(),
-            value_input: TextInput::default(),
+            key_input: TextInput::new(Some("Key")),
+            value_input: TextInput::new(Some("Value")),
             data: IndexMap::<String, Value>::new(),
             lines_count: 0,
             message_to_report: RefCell::new(ReportedMessage {

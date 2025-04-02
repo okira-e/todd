@@ -1,45 +1,56 @@
+#![allow(dead_code)]
+
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
     style::{Color, Style},
     text::Span,
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 
 /// A reusable text input widget that handles cursor movement and text editing
 #[derive(Debug, Clone)]
 pub struct TextInput {
+    /// The title of the input block
+    title: Option<String>,
     /// Current value of the input box
     content: String,
     /// Position of cursor in the editor area (character index, not byte index)
     character_index: usize,
     /// Whether the input has focus and the cursor should be shown
     pub is_focused: bool,
-    /// The style to apply to the text input when focused
-    focus_style: Style,
     /// The style to apply to the text input when not focused
-    default_style: Style,
-    /// Optional block to wrap the text input
-    block: Option<Block<'static>>,
+    text_style: Style,
+    /// The style to apply to the text input when focused
+    focused_text_style: Style,
+    /// The style to apply to the block input when not focused
+    block_style: Style,
+    /// The style to apply to the block input when focused
+    focused_block_style: Style,
+    /// Show the block around the text input field.
+    show_block: bool,
     /// Whether to show the cursor
     show_cursor: bool,
 }
 
 impl TextInput {
-    pub fn new() -> Self {
+    pub fn new(title: Option<&str>) -> Self {
         Self {
+            title: title.map(|s| s.to_string()),
             content: String::new(),
             character_index: 0,
             is_focused: false,
-            focus_style: Style::default().fg(Color::Yellow),
-            default_style: Style::default(),
-            block: None,
+            text_style: Style::default(),
+            focused_text_style: Style::default().fg(Color::White),
+            block_style: Style::default(),
+            focused_block_style: Style::default().fg(Color::Yellow),
+            show_block: true,
             show_cursor: true,
         }
     }
 
     pub fn content(&self) -> &str {
-        &self.content
+        return &self.content;
     }
 
     pub fn set_content(&mut self, content: impl Into<String>) {
@@ -64,20 +75,14 @@ impl TextInput {
         return self;
     }
 
-    pub fn with_focus_style(mut self, style: Style) -> Self {
-        self.focus_style = style;
+    pub fn with_text_style(mut self, style: Style) -> Self {
+        self.text_style = style;
         
         return self;
     }
-
-    pub fn with_default_style(mut self, style: Style) -> Self {
-        self.default_style = style;
-        
-        return self;
-    }
-
-    pub fn block(mut self, block: Block<'static>) -> Self {
-        self.block = Some(block);
+    
+    pub fn with_block_style(mut self, style: Style) -> Self {
+        self.block_style = style;
         
         return self;
     }
@@ -136,24 +141,29 @@ impl TextInput {
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.content.chars().count())
+        return new_cursor_pos.clamp(0, self.content.chars().count());
     }
 
     /// Get the cursor position for the frame renderer
     pub fn cursor_position(&self, area: Rect) -> Position {
         // Calculate the block border offset if we have a block
-        let x_offset = if self.block.is_some() { 1 } else { 0 };
-        let y_offset = if self.block.is_some() { 1 } else { 0 };
+        let x_offset = if self.show_block { 1 } else { 0 };
+        let y_offset = if self.show_block { 1 } else { 0 };
 
-        Position::new(
+        return Position::new(
             // Draw the cursor at the current position in the input field
             area.x + self.character_index as u16 + x_offset,
             // Position vertically
             area.y + y_offset,
-        )
+        );
     }
 
-    /// Render the widget to a frame
+    /// Render the widget to a frame.
+    /// This should be used instead of `frame.render_widget(text_input)` Because after
+    /// the rendering of the widget on the frame, the cursor needs to be rendered after
+    /// the fact by the frame/ratatui, so it's not really part of this TextInput struct.
+    ///
+    /// This function handles that.
     pub fn render_to_frame(&self, frame: &mut ratatui::Frame, area: Rect) {
         frame.render_widget(self.clone(), area);
 
@@ -166,25 +176,35 @@ impl TextInput {
 
 impl Default for TextInput {
     fn default() -> Self {
-        Self::new()
+        Self::new(Some("Text Input"))
     }
 }
 
 impl Widget for TextInput {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let style = if self.is_focused {
-            self.focus_style
+        let text_style = if self.is_focused {
+            self.focused_text_style
         } else {
-            self.default_style
+            self.text_style
+        };
+        
+        let block_style = if self.is_focused {
+            self.focused_block_style
+        } else {
+            self.block_style
         };
 
         // Create a paragraph widget for the text content
-        let mut paragraph = Paragraph::new(Span::raw(&self.content)).style(style);
-
-        // Apply the block if we have one
-        if let Some(block) = self.block {
-            paragraph = paragraph.block(block);
-        }
+        let paragraph = Paragraph::new(
+                Span::raw(&self.content)
+            )
+            .style(text_style)
+            .block(
+                Block::default()
+                    .style(block_style)
+                    .borders(Borders::ALL)
+                    .title(self.title.unwrap_or(String::from("Text Input")))
+            );
 
         // Render the paragraph
         paragraph.render(area, buf);
