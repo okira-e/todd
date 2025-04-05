@@ -1,0 +1,18 @@
+{
+    "name": "Omar",
+    "role": {
+        "role_name": "Admin",
+        "active": true
+    },
+    "age": 24,
+    "permissions": ["read", "write"],
+    "business": {
+        "business_name": "Omar",
+        "activated": false,
+        "business_contact": {
+            "phone": "123456789",
+            "email": "mail@email.com"
+        }
+    }
+}
+

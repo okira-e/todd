@@ -1,7 +1,6 @@
 use std::{cell::RefCell, time::{Duration, Instant}};
 
 use color_eyre::Result;
-use indexmap::IndexMap;
 use ratatui::
     DefaultTerminal
 ;
@@ -27,7 +26,7 @@ pub enum CurrentlyEditing {
 pub struct ValuePair {
     pub indentation: usize,
     pub key: String,
-    pub value: Option<String>,
+    pub value: Option<Value>,
     pub is_array_value: bool,
 }
 
@@ -89,17 +88,61 @@ pub enum ReportedMessageKinds {
     Success,
 }
 
+// /// Represents the data in the file.
+// #[derive(Debug)]
+// struct JsonData {
+//     pub is_array: bool,
+//     object: IndexMap<String, Value>,
+//     array: Vec<Value>,
+// }
+
+// impl JsonData {
+//     pub fn new(json_content: &str) -> color_eyre::Result<Self> {
+//         let mut ret = Self {
+//             is_array: false,
+//             array: vec![],
+//             object: IndexMap::new(),
+//         };
+        
+//         let parsed: Value = serde_json::from_str(json_content)?;
+        
+//         match parsed {
+//             Value::Object(map) => {
+//                 // Convert to IndexMap if needed
+//                 let index_map: IndexMap<String, Value> = map.into_iter().collect();
+                
+//                 ret.object = index_map;
+//             },
+//             Value::Array(arr) => {
+//                 ret.is_array = true;
+//                 ret.array = arr;
+//             },
+//             _ => {
+//                 // Handle primitive values (string, number, bool, null)
+//                 // You could wrap them in an array or create a single-item object
+//                 let mut map = IndexMap::new();
+//                 map.insert("root".to_string(), parsed);
+
+//                 ret.object = map;
+//             }
+//         };
+        
+//         return Ok(ret);
+//     }
+// }
+
 #[derive(Debug)]
 pub struct App {
-    /// the currently being edited json key.
+    /// The currently being edited json key.
     pub key_input: TextInput,
-    /// the currently being edited json value.
+    /// The currently being edited json value.
     pub value_input: TextInput,
-    /// The representation of our key and value pairs with serde Serialize support
-    pub data: IndexMap<String, Value>,
-    /// the current screen the user is looking at, and will later determine what is rendered.
+    /// The representation of the json file data. It could be an array or an object at the top level.
+    pub json: Value,
+    /// The current screen the user is looking at, and will later determine what is rendered.
     pub current_screen: CurrentScreen,
-    /// the optional state containing which of the key or value pair the user is editing. It is an option, because when the user is not directly editing a key-value pair, this will be set to `None`.
+    /// The optional state containing which of the key or value pair the user is editing. It is an option, 
+    /// because when the user is not directly editing a key-value pair, this will be set to `None`.
     pub currently_editing: Option<CurrentlyEditing>,
     /// Keeps track of where the current focused line is.
     pub line_at_cursor: usize,
@@ -111,11 +154,13 @@ pub struct App {
 }
 
 impl App {
-    /// Construct a new instance of [`App`].
+    /// Construct the app and sets the JSON data.
     pub fn new(json_content: &str) -> Result<Self> {
         let mut app = Self::default();
 
-        app.data = serde_json::from_str(json_content)?;
+        // app.json = JsonData::new(json_content)?;
+        let json = serde_json::from_str(json_content)?;
+        app.json = json;
 
         return Ok(app);
     }
@@ -146,7 +191,7 @@ impl App {
     
     /// Inserts the from the user popup to the file/data.
     pub fn insert_new_pair_from_input(&mut self) {
-        self.data.insert(
+        self.json.as_object_mut().unwrap().insert(
             self.key_input.content().to_string(),
             serde_json::to_value(self.value_input.content()).unwrap(),
         );
@@ -179,79 +224,102 @@ impl App {
         self.running = false;
     }
 
+    /// Inserts all the data recursively to the app. It also calculates and sets the
+    /// indentations for the lines based on the nest-ness of the data.
     pub fn insert_data_to_tree(
         &self, 
         pairs: &mut Vec<ValuePair>,
-        data: &IndexMap<String, Value>,
+        data: &Value,
         mut indentation_counter: usize,
     ) -> usize {
         indentation_counter += 1;
         let mut lines_count = 0;
 
-        for (key, value) in data {
-            match value.is_object() {
-                false => {
-                    if value.is_array() {
-                        lines_count += 1;
-                        pairs.push(
-                            ValuePair { 
-                                indentation: indentation_counter, 
-                                key: key.clone(), 
-                                value: None,
-                                is_array_value: false,
-                            }
-                        );
-                        
-                        // Insert all values in the array at once with one more indentation level. No recursion
-                        // needed.
-                        for it in value.as_array().unwrap() {
-                            lines_count += 1;
-                            pairs.push(
-                                ValuePair {
-                                    indentation: indentation_counter + 1, 
-                                    key: serde_json::from_value(it.clone()).unwrap(), 
-                                    value: None,
-                                    is_array_value: true,
-                                }
-                            );
-                        }
-                    } else {
-                        lines_count += 1;
-                        pairs.push(
-                            ValuePair {
-                                indentation: indentation_counter, 
-                                key: key.clone(), 
-                                value: Some(serde_json::from_value(value.clone()).unwrap()),
-                                is_array_value: false,
-                            }
-                        );
-                    }
-                }
-                true => {
-                    lines_count += 1;
+        // Check if the root element of the file is an objet or an array. Then recursively
+        // walk the tree.
+        if data.is_object() {
+            for (key, value) in data.as_object().unwrap() {
+                self.walk_data_tree_for_json(key, value, pairs, &mut lines_count, indentation_counter);
+            }
+        } else {
+            for value in data.as_array().unwrap() {
+                self.walk_data_tree_for_json("GLOBAL", value, pairs, &mut lines_count, indentation_counter);
+            }
+        }
+        
+        
+        return lines_count;
+    }
+    
+    /// Actually does the walking and inserting of all values in the json.
+    fn walk_data_tree_for_json(
+        &self, 
+        key: &str, 
+        value: &Value, 
+        pairs: &mut Vec<ValuePair>,
+        lines_count: &mut usize,
+        indentation_counter: usize,
+    ) {
+        match value.is_object() {
+            false => {
+                if value.is_array() {
+                    *lines_count += 1;
                     pairs.push(
-                        ValuePair {
+                        ValuePair { 
                             indentation: indentation_counter, 
-                            key: key.clone(), 
+                            key: key.to_owned(), 
                             value: None,
                             is_array_value: false,
                         }
                     );
-
-                    // Convert the `value: Value` to a HashMap.
-                    // @Improvement: Currently, the original order is being lost.
-                    let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
                     
-                    lines_count += self.insert_data_to_tree(
-                        pairs,
-                        &new_data,
-                        indentation_counter
+                    // Insert all values in the array at once with one more indentation level. No recursion
+                    // needed.
+                    for it in value.as_array().unwrap() {
+                        *lines_count += 1;
+                        pairs.push(
+                            ValuePair {
+                                indentation: indentation_counter + 1, 
+                                key: serde_json::from_value(it.clone()).unwrap(), 
+                                value: None,
+                                is_array_value: true,
+                            }
+                        );
+                    }
+                } else {
+                    *lines_count += 1;
+                    pairs.push(
+                        ValuePair {
+                            indentation: indentation_counter, 
+                            key: key.to_owned(), 
+                            value: Some(serde_json::from_value(value.clone()).unwrap()),
+                            is_array_value: false,
+                        }
                     );
                 }
             }
+            true => {
+                *lines_count += 1;
+                pairs.push(
+                    ValuePair {
+                        indentation: indentation_counter, 
+                        key: key.to_owned(), 
+                        value: None,
+                        is_array_value: false,
+                    }
+                );
+                
+                // Convert the `value: Value` to a HashMap.
+                // let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
+                let new_data = value;
+                
+                *lines_count += self.insert_data_to_tree(
+                    pairs,
+                    &new_data,
+                    indentation_counter
+                );
+            }
         }
-        
-        return lines_count;
     }
 
     fn handle_navigation_actions(&mut self, action: AppNavigationAction) {
@@ -399,7 +467,8 @@ impl Default for App {
             running: false,
             key_input: TextInput::new(Some("Key")),
             value_input: TextInput::new(Some("Value")),
-            data: IndexMap::<String, Value>::new(),
+            // json: IndexMap::<String, Value>::new(),
+            json: Value::default(),
             lines_count: 0,
             message_to_report: RefCell::new(ReportedMessage {
                 message: "".to_string(),
@@ -420,7 +489,7 @@ mod tests {
 
     #[test]
     fn represent_json_in_viewer() {
-        let mut app = App::default();
+        let app = App::default();
         let mut pairs = vec![];
 
         let data = r#"
@@ -441,7 +510,8 @@ mod tests {
         }
         "#;
 
-        let data: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
+        // let data: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
+        let data = serde_json::from_str(data).unwrap();
 
         app.insert_data_to_tree(&mut pairs, &data, 0);
 
@@ -450,8 +520,8 @@ mod tests {
             pairs[0],
             ValuePair {
                 indentation: 1,
-                key: "name".to_string(),
-                value: Some("Omar".to_string()),
+                key: "age".to_string(),
+                value: Some(serde_json::to_value("24").unwrap()),
                 is_array_value: false,
             }
         );

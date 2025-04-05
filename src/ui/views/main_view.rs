@@ -32,7 +32,13 @@ impl App {
     }
 
     fn draw_pairs_widget(&mut self, frame: &mut Frame, layout: &Rc<[Rect]>) {
-        let list_widget = if self.data.len() == 0 {
+        let json_length = if self.json.is_object() {
+            self.json.as_object().unwrap().len()
+        } else {
+            self.json.as_array().unwrap().len()
+        };
+        
+        let list_widget = if json_length == 0 {
             List::new(
                 vec![
                     ListItem::new(
@@ -44,28 +50,53 @@ impl App {
             )
         } else {
             let mut pairs = vec![];
-            let lines_count = self.insert_data_to_tree(&mut pairs, &self.data, 0);
+            let lines_count = self.insert_data_to_tree(&mut pairs, &self.json, 0);
             self.lines_count = lines_count;
-    
+
             let focused_pair_style = Style::default().bg(Color::Green).fg(Color::Black);
+
             let mut list_items: Vec<ListItem> = vec![];
             for (i, pair) in pairs.into_iter().enumerate() {
                 let indentation_padding: String = (0..pair.indentation - 1).map(|_| "    ").collect();
-    
+                let is_line_focused = self.line_at_cursor == i;
+                
                 let list_item = ListItem::new(
-                    Line::from(
-                        match pair.value {
-                            Some(value) => format!("{}{}: {}", indentation_padding, pair.key, value),
-                            None => {
-                                match pair.is_array_value {
-                                    true => format!("{}{}", indentation_padding, pair.key),
-                                    false => format!("{}{}:", indentation_padding, pair.key),
+                    match pair.value { // A Line is returned here.
+                        Some(value) => {
+                            let indentation_and_key_span = Span::from(format!("{}{}: ", indentation_padding, pair.key));
+
+                            // Colorize the value part of the line/pair based on the type of the value. Kinda like syntax highlighting.
+                            let mut value_span = Span::from(format!("{}", value));
+                            if !is_line_focused { // Do not set the colored text if the we are hovering over this line because there's a bg color applied in that case.
+                                if value.is_boolean() {
+                                    value_span = value_span.style(Style::default().fg(Color::Red));
+                                } else if value.is_number() {
+                                    value_span = value_span.style(Style::default().fg(Color::Rgb(212, 188, 125))); // yellowish color.
+                                } else {
+                                    value_span = value_span.style(Style::default().fg(Color::Green));
                                 }
                             }
+                            
+                            indentation_and_key_span + value_span // Concatenating two `Span`s makeup a `Line`.
+                        },
+                        None => {
+                            // Match against if this key's value is an array or another object.
+                            match pair.is_array_value {
+                                true => {
+                                    let text = format!("{}{}", indentation_padding, pair.key);
+
+                                    Line::from(Span::from(text).style(Style::default()))
+                                },
+                                false => {
+                                    let text = format!("{}{}:", indentation_padding, pair.key);
+
+                                    Line::from(Span::from(text).style(Style::default()))
+                                },
+                            }
                         }
-                    )
+                    }
                     .style(
-                        if self.line_at_cursor == i { focused_pair_style } else { Style::default() },
+                        if is_line_focused { focused_pair_style } else { Style::default() },
                     ),
                 );
     

@@ -41,7 +41,7 @@ impl App {
             
             CurrentScreen::Editing => match (key.modifiers, key.code) {
                 (_, KeyCode::Enter) => {
-                    if !self.key_input.content().is_empty() && !self.value_input.content().is_empty() {
+                    if !self.key_input.content().to_string().is_empty() && !self.value_input.content().to_string().is_empty() {
                         self.update(Action::Editing(EditingAction::Submit));
                         self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
                     }
