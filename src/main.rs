@@ -29,7 +29,13 @@ fn main() -> color_eyre::Result<()> {
         exit(1);
     }
 
-    let mut file = File::open(args[1].clone())?;
+    let mut file = match File::open(args[1].clone()) {
+        Ok(val) => val,
+        Err(err) => {
+            eprintln!("Failed to open file: {}", err);
+            exit(1);
+        },
+    };
     let mut file_content = String::new();
     file.read_to_string(&mut file_content)?;
 

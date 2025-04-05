@@ -11,14 +11,14 @@ use ratatui::{
 /// A reusable text input widget that handles cursor movement and text editing
 #[derive(Debug, Clone)]
 pub struct TextInput {
+    /// Whether the input has focus and the cursor should be shown
+    pub is_focused: bool,
     /// The title of the input block
     title: Option<String>,
     /// Current value of the input box
     content: String,
     /// Position of cursor in the editor area (character index, not byte index)
     character_index: usize,
-    /// Whether the input has focus and the cursor should be shown
-    pub is_focused: bool,
     /// The style to apply to the text input when not focused
     text_style: Style,
     /// The style to apply to the text input when focused

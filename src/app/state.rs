@@ -191,9 +191,30 @@ impl App {
     
     /// Inserts the from the user popup to the file/data.
     pub fn insert_new_pair_from_input(&mut self) {
+        let value = serde_json::to_value(self.value_input.content()).unwrap();
+        
+        // Serialize/Parse the value to its correct type by trying to parse it.
+        // The input text component it comes from treats & makes it a string
+        // because that's how it views and modify it. But it may be a number
+        // so we insert it as such.
+        // The result is still a value, but it's now constructed with information
+        // about what it really is instead of saying a Value::String for everything.
+        let value: Value = match value {
+            Value::String(s) => {
+                if s.parse::<f64>().is_ok() {
+                    Value::Number(s.parse().unwrap())
+                } else if s.parse::<bool>().is_ok() {
+                    Value::Bool(s.parse().unwrap())
+                } else {
+                    Value::String(s)
+                }
+            },
+            _ => value, // The value is an object or an array. Not even a string.
+        };
+        
         self.json.as_object_mut().unwrap().insert(
             self.key_input.content().to_string(),
-            serde_json::to_value(self.value_input.content()).unwrap(),
+            value,
         );
         
         self.report(
