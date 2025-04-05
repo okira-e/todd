@@ -264,10 +264,9 @@ impl App {
             }
         } else {
             for value in data.as_array().unwrap() {
-                self.walk_data_tree_for_json("GLOBAL", value, pairs, &mut lines_count, indentation_counter);
+                self.walk_data_tree_for_json("", value, pairs, &mut lines_count, indentation_counter);
             }
         }
-        
         
         return lines_count;
     }
