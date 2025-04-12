@@ -1,0 +1,346 @@
+{
+    "object": "list",
+    "url": "/v1/charges",
+    "has_more": false,
+    "total_count": 3,
+    "data": [
+        {
+            "id": "ch_3NMgRZEaNTl8fzWO1KxdGHYX",
+            "object": "charge",
+            "amount": 2000,
+            "amount_captured": 2000,
+            "amount_refunded": 0,
+            "application": null,
+            "application_fee": null,
+            "application_fee_amount": null,
+            "balance_transaction": "txn_3NMgRZEaNTl8fzWO1V9iFnBP",
+            "billing_details": {
+                "address": {
+                    "city": "San Francisco",
+                    "country": "US",
+                    "line1": "123 Market St",
+                    "line2": "Suite 500",
+                    "postal_code": "94103",
+                    "state": "CA"
+                },
+                "email": "jenny.rosen@example.com",
+                "name": "Jenny Rosen",
+                "phone": "+14155551234"
+            },
+            "calculated_statement_descriptor": "TODD JSON EDITOR",
+            "captured": true,
+            "created": 1680789012,
+            "currency": "usd",
+            "customer": "cus_NXtR5etSi8oD3F",
+            "description": "Subscription payment",
+            "destination": null,
+            "dispute": null,
+            "disputed": false,
+            "failure_balance_transaction": null,
+            "failure_code": null,
+            "failure_message": null,
+            "fraud_details": {},
+            "invoice": "in_1NMgRZEaNTl8fzWO1bD4uKZX",
+            "livemode": false,
+            "metadata": {
+                "order_id": "T12345",
+                "customer_notes": "Priority shipping"
+            },
+            "on_behalf_of": null,
+            "order": null,
+            "outcome": {
+                "network_status": "approved_by_network",
+                "reason": null,
+                "risk_level": "normal",
+                "risk_score": 32,
+                "seller_message": "Payment complete.",
+                "type": "authorized"
+            },
+            "paid": true,
+            "payment_intent": "pi_3NMgRZEaNTl8fzWO1S8JHfxD",
+            "payment_method": "pm_1NMgRYEaNTl8fzWO1qUH6oiL",
+            "payment_method_details": {
+                "card": {
+                    "brand": "visa",
+                    "checks": {
+                        "address_line1_check": "pass",
+                        "address_postal_code_check": "pass",
+                        "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 12,
+                    "exp_year": 2025,
+                    "fingerprint": "Xt5EWLLDS7FJjR1c",
+                    "funding": "credit",
+                    "installments": null,
+                    "last4": "4242",
+                    "network": "visa",
+                    "three_d_secure": null,
+                    "wallet": null
+                },
+                "type": "card"
+            },
+            "receipt_email": "jenny.rosen@example.com",
+            "receipt_number": "1234-5678",
+            "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xMlg3MjNCdUhKMWtFZGRmEOaZ6KIG",
+            "refunded": false,
+            "refunds": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/charges/ch_3NMgRZEaNTl8fzWO1KxdGHYX/refunds"
+            },
+            "review": null,
+            "shipping": {
+                "address": {
+                    "city": "San Francisco",
+                    "country": "US",
+                    "line1": "123 Market St",
+                    "line2": "Suite 500",
+                    "postal_code": "94103",
+                    "state": "CA"
+                },
+                "carrier": "USPS",
+                "name": "Jenny Rosen",
+                "phone": "+14155551234",
+                "tracking_number": "9400110898765001234567"
+            },
+            "source": null,
+            "source_transfer": null,
+            "statement_descriptor": "TODD JSON EDITOR",
+            "statement_descriptor_suffix": null,
+            "status": "succeeded",
+            "transfer_data": null,
+            "transfer_group": null
+        },
+        {
+            "id": "ch_3NHpABEaNTl8fzWO0KoResvT",
+            "object": "charge",
+            "amount": 5999,
+            "amount_captured": 5999,
+            "amount_refunded": 0,
+            "application": null,
+            "application_fee": null,
+            "application_fee_amount": null,
+            "balance_transaction": "txn_3NHpABEaNTl8fzWO0M7UjdFP",
+            "billing_details": {
+                "address": {
+                    "city": "Portland",
+                    "country": "US",
+                    "line1": "456 Pine St",
+                    "line2": null,
+                    "postal_code": "97204",
+                    "state": "OR"
+                },
+                "email": "michael.smith@example.com",
+                "name": "Michael Smith",
+                "phone": "+15035557890"
+            },
+            "calculated_statement_descriptor": "TODD JSON EDITOR",
+            "captured": true,
+            "created": 1680012345,
+            "currency": "usd",
+            "customer": "cus_MTkR7gSGI8hJ2Q",
+            "description": "One-time purchase",
+            "destination": null,
+            "dispute": null,
+            "disputed": false,
+            "failure_balance_transaction": null,
+            "failure_code": null,
+            "failure_message": null,
+            "fraud_details": {},
+            "invoice": null,
+            "livemode": false,
+            "metadata": {
+                "order_id": "T67890",
+                "product_sku": "JSON-PRO-2024"
+            },
+            "on_behalf_of": null,
+            "order": null,
+            "outcome": {
+                "network_status": "approved_by_network",
+                "reason": null,
+                "risk_level": "normal",
+                "risk_score": 27,
+                "seller_message": "Payment complete.",
+                "type": "authorized"
+            },
+            "paid": true,
+            "payment_intent": "pi_3NHpABEaNTl8fzWO0F9KhTxM",
+            "payment_method": "pm_1NHpAAEaNTl8fzWO0tGH5LiR",
+            "payment_method_details": {
+                "card": {
+                    "brand": "mastercard",
+                    "checks": {
+                        "address_line1_check": "pass",
+                        "address_postal_code_check": "pass",
+                        "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 8,
+                    "exp_year": 2026,
+                    "fingerprint": "LpM9E7hJQW5TcRpL",
+                    "funding": "credit",
+                    "installments": null,
+                    "last4": "5678",
+                    "network": "mastercard",
+                    "three_d_secure": null,
+                    "wallet": null
+                },
+                "type": "card"
+            },
+            "receipt_email": "michael.smith@example.com",
+            "receipt_number": "2345-6789",
+            "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xMlg3MjNCdUhKMWtFZGRmEKfl3PEF",
+            "refunded": false,
+            "refunds": {
+                "object": "list",
+                "data": [],
+                "has_more": false,
+                "total_count": 0,
+                "url": "/v1/charges/ch_3NHpABEaNTl8fzWO0KoResvT/refunds"
+            },
+            "review": null,
+            "shipping": null,
+            "source": null,
+            "source_transfer": null,
+            "statement_descriptor": "TODD JSON EDITOR",
+            "statement_descriptor_suffix": null,
+            "status": "succeeded",
+            "transfer_data": null,
+            "transfer_group": null
+        },
+        {
+            "id": "ch_3NFbKREaNTl8fzWO1LpQuSdT",
+            "object": "charge",
+            "amount": 15000,
+            "amount_captured": 15000,
+            "amount_refunded": 7500,
+            "application": null,
+            "application_fee": null,
+            "application_fee_amount": null,
+            "balance_transaction": "txn_3NFbKREaNTl8fzWO1P8Uj3kP",
+            "billing_details": {
+                "address": {
+                    "city": "Austin",
+                    "country": "US",
+                    "line1": "789 Oak Ave",
+                    "line2": "Apt 204",
+                    "postal_code": "78701",
+                    "state": "TX"
+                },
+                "email": "sarah.jones@example.com",
+                "name": "Sarah Jones",
+                "phone": "+15125559876"
+            },
+            "calculated_statement_descriptor": "TODD JSON EDITOR",
+            "captured": true,
+            "created": 1679323456,
+            "currency": "usd",
+            "customer": "cus_KLpR9etSj7bE1G",
+            "description": "Enterprise license",
+            "destination": null,
+            "dispute": null,
+            "disputed": false,
+            "failure_balance_transaction": null,
+            "failure_code": null,
+            "failure_message": null,
+            "fraud_details": {},
+            "invoice": "in_1NFbKREaNTl8fzWO1cE5vKzX",
+            "livemode": false,
+            "metadata": {
+                "order_id": "T24680",
+                "department": "Engineering",
+                "seats": "10"
+            },
+            "on_behalf_of": null,
+            "order": null,
+            "outcome": {
+                "network_status": "approved_by_network",
+                "reason": null,
+                "risk_level": "low",
+                "risk_score": 12,
+                "seller_message": "Payment complete.",
+                "type": "authorized"
+            },
+            "paid": true,
+            "payment_intent": "pi_3NFbKREaNTl8fzWO1G7JiSxK",
+            "payment_method": "pm_1NFbKQEaNTl8fzWO1rVJ8LpN",
+            "payment_method_details": {
+                "card": {
+                    "brand": "amex",
+                    "checks": {
+                        "address_line1_check": "pass",
+                        "address_postal_code_check": "pass",
+                        "cvc_check": "pass"
+                    },
+                    "country": "US",
+                    "exp_month": 5,
+                    "exp_year": 2027,
+                    "fingerprint": "NpM8F7iKRW6TdSqM",
+                    "funding": "credit",
+                    "installments": null,
+                    "last4": "0005",
+                    "network": "amex",
+                    "three_d_secure": null,
+                    "wallet": null
+                },
+                "type": "card"
+            },
+            "receipt_email": "sarah.jones@example.com",
+            "receipt_number": "3456-7890",
+            "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xMlg3MjNCdUhKMWtFZGRmEMnG5esF",
+            "refunded": true,
+            "refunds": {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "re_3NFbKREaNTl8fzWO1LpQuSdT_refund",
+                        "object": "refund",
+                        "amount": 7500,
+                        "balance_transaction": "txn_3NFbLSEaNTl8fzWO1X9Vk4mP",
+                        "charge": "ch_3NFbKREaNTl8fzWO1LpQuSdT",
+                        "created": 1679324000,
+                        "currency": "usd",
+                        "metadata": {
+                            "reason": "customer_request",
+                            "agent_id": "agent_12345"
+                        },
+                        "payment_intent": "pi_3NFbKREaNTl8fzWO1G7JiSxK",
+                        "reason": "requested_by_customer",
+                        "receipt_number": null,
+                        "source_transfer_reversal": null,
+                        "status": "succeeded",
+                        "transfer_reversal": null
+                    }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/charges/ch_3NFbKREaNTl8fzWO1LpQuSdT/refunds"
+            },
+            "review": null,
+            "shipping": {
+                "address": {
+                    "city": "Austin",
+                    "country": "US",
+                    "line1": "789 Oak Ave",
+                    "line2": "Apt 204",
+                    "postal_code": "78701",
+                    "state": "TX"
+                },
+                "carrier": "FedEx",
+                "name": "Sarah Jones",
+                "phone": "+15125559876",
+                "tracking_number": "7891011121314151617"
+            },
+            "source": null,
+            "source_transfer": null,
+            "statement_descriptor": "TODD JSON EDITOR",
+            "statement_descriptor_suffix": null,
+            "status": "succeeded",
+            "transfer_data": null,
+            "transfer_group": null
+        }
+    ]
+}

@@ -1,0 +1,28 @@
+{
+    "name": "Jane Doe",
+    "age": 9,
+    "address": {
+        "street": "123 Main St",
+        "city": "Anytown",
+        "state": "CA",
+        "zip": "12345"
+    },
+    "salary": "5",
+    "billing_info": {
+        "card_number": "1234567890123456",
+        "expiry_date": "12/25",
+        "invoices": [
+            {
+                "amount": 100.0,
+                "due_date": "2023-06-30"
+            },
+            {
+                "amount": 100.0,
+                "due_date": "2023-06-30"
+            }
+        ],
+        "cvv": "123"
+    },
+    "currency": "USD",
+    "currency_symbol": "$"
+}

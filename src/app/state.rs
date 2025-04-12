@@ -6,7 +6,7 @@ use ratatui::
 ;
 use serde_json::Value;
 
-use crate::ui::widgets::text_input::TextInput;
+use crate::{ui::widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
 
 
 #[derive(Debug)]
@@ -212,10 +212,14 @@ impl App {
             _ => value, // The value is an object or an array. Not even a string.
         };
         
-        self.json.as_object_mut().unwrap().insert(
-            self.key_input.content().to_string(),
-            value,
-        );
+        // let (object_to_insert_into, index) = get_nested_object_to_insert_into(self.line_at_cursor, &self.json);
+        // if let Some(object_to_insert_into) = object_to_insert_into {
+        //     object_to_insert_into.as_object_mut().unwrap().shift_insert(
+        //         index + 1,
+        //         self.key_input.content().to_string(),
+        //         value,
+        //     );
+        // }
         
         self.report(
             format!("Inserted new key-value pair: {} -> {}", self.key_input.content(), self.value_input.content()),
@@ -280,23 +284,46 @@ impl App {
         lines_count: &mut usize,
         indentation_counter: usize,
     ) {
-        match value.is_object() {
-            false => {
-                if value.is_array() {
+        if value.is_object() {
+            *lines_count += 1;
+            pairs.push(
+                ValuePair {
+                    indentation: indentation_counter, 
+                    key: key.to_owned(), 
+                    value: None,
+                    is_array_value: false,
+                }
+            );
+            
+            // Convert the `value: Value` to a HashMap.
+            // let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
+            let new_data = value;
+            
+            *lines_count += self.insert_data_to_tree(
+                pairs,
+                &new_data,
+                indentation_counter
+            );
+        } else {
+            if value.is_array() {
+                *lines_count += 1;
+                pairs.push(
+                    ValuePair { 
+                        indentation: indentation_counter, 
+                        key: key.to_owned(), 
+                        value: None,
+                        is_array_value: false,
+                    }
+                );
+                
+                // Insert all values in the array at once with one more indentation level. No recursion
+                // needed.
+                for it in value.as_array().unwrap() {
                     *lines_count += 1;
-                    pairs.push(
-                        ValuePair { 
-                            indentation: indentation_counter, 
-                            key: key.to_owned(), 
-                            value: None,
-                            is_array_value: false,
-                        }
-                    );
-                    
-                    // Insert all values in the array at once with one more indentation level. No recursion
-                    // needed.
-                    for it in value.as_array().unwrap() {
-                        *lines_count += 1;
+
+                    if it.is_object() {
+                        self.walk_data_tree_for_json("", it, pairs, lines_count, indentation_counter + 1);
+                    } else {
                         pairs.push(
                             ValuePair {
                                 indentation: indentation_counter + 1, 
@@ -306,37 +333,16 @@ impl App {
                             }
                         );
                     }
-                } else {
-                    *lines_count += 1;
-                    pairs.push(
-                        ValuePair {
-                            indentation: indentation_counter, 
-                            key: key.to_owned(), 
-                            value: Some(serde_json::from_value(value.clone()).unwrap()),
-                            is_array_value: false,
-                        }
-                    );
                 }
-            }
-            true => {
+            } else {
                 *lines_count += 1;
                 pairs.push(
                     ValuePair {
                         indentation: indentation_counter, 
                         key: key.to_owned(), 
-                        value: None,
-                        is_array_value: false,
+                        value: Some(serde_json::from_value(value.clone()).unwrap()),
+                        is_array_value: if key == "" { true } else { false }, // We're in an array.
                     }
-                );
-                
-                // Convert the `value: Value` to a HashMap.
-                // let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
-                let new_data = value;
-                
-                *lines_count += self.insert_data_to_tree(
-                    pairs,
-                    &new_data,
-                    indentation_counter
                 );
             }
         }
@@ -508,9 +514,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn represent_json_in_viewer() {
+    fn test_insert_data_to_tree_for_object() {
         let app = App::default();
-        let mut pairs = vec![];
 
         let data = r#"
         {
@@ -526,24 +531,197 @@ mod tests {
                     "phone": "123456789",
                     "email": "mail@email.com"
                 }
-            }
+            },
+            "permissions": [
+                "READ",
+                "WRITE"
+            ]
         }
         "#;
 
-        // let data: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
         let data = serde_json::from_str(data).unwrap();
 
-        app.insert_data_to_tree(&mut pairs, &data, 0);
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+    
+            assert_eq!(pairs.len(), 13);
+            assert_eq!(
+                pairs[0],
+                ValuePair {
+                    indentation: 1,
+                    key: "name".to_string(),
+                    value: Some(serde_json::to_value("Omar").unwrap()),
+                    is_array_value: false,
+                }
+            );
+        }
 
-        assert_eq!(pairs.len(), 10);
-        assert_eq!(
-            pairs[0],
-            ValuePair {
-                indentation: 1,
-                key: "age".to_string(),
-                value: Some(serde_json::to_value("24").unwrap()),
-                is_array_value: false,
-            }
-        );
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+    
+            assert_eq!(pairs.len(), 13);
+            assert_eq!(
+                pairs[2],
+                ValuePair {
+                    indentation: 2,
+                    key: "role_name".to_string(),
+                    value: Some(serde_json::to_value("Admin").unwrap()),
+                    is_array_value: false,
+                }
+            );
+        }
+        
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+            
+            assert_eq!(pairs.len(), 13);
+            assert_eq!(
+                pairs[8],
+                ValuePair {
+                    indentation: 3,
+                    key: "phone".to_string(),
+                    value: Some(serde_json::to_value("123456789").unwrap()),
+                    is_array_value: false,
+                }
+            );
+        }
+
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+            
+            assert_eq!(pairs.len(), 13);
+            assert_eq!(
+                pairs[11],
+                ValuePair {
+                    indentation: 2,
+                    key: "READ".to_string(),
+                    value: None,
+                    is_array_value: true,
+                }
+            );
+        }
     }
+    
+    
+    #[test]
+    fn test_insert_data_to_tree_for_array() {
+        let app = App::default();
+
+        let data = r#"
+        [
+            42,
+            null,
+            {
+                "name": "Omar",
+                "role": {
+                    "role_name": "Admin",
+                    "active": "true"
+                },
+                "age": "24",
+                "business": {
+                    "business_name": "Omar",
+                    "business_contact": {
+                        "phone": "123456789",
+                        "email": "mail@email.com"
+                    }
+                }
+            }
+        ]
+        "#;
+        
+        let data = serde_json::from_str(data).unwrap();
+
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+    
+            assert_eq!(pairs.len(), 13); // The line between `null,` and `"name": "Omar",` is an empty pair on purpose for the UI.
+            assert_eq!(
+                pairs[0],
+                ValuePair {
+                    indentation: 1,
+                    key: "".to_string(),
+                    value: Some(serde_json::to_value(42).unwrap()),
+                    is_array_value: true,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn test_insert_data_to_tree_for_arrays_inside_objects() {
+        let app = App::default();
+
+        let data = r#"
+        {
+            "name": "Jane Doe",
+            "age": 9,
+            "address": {
+                "street": "123 Main St",
+                "city": "Anytown",
+                "state": "CA",
+                "zip": "12345"
+            },
+            "salary": "5",
+            "billing_info": {
+                "card_number": "1234567890123456",
+                "expiry_date": "12/25",
+                "invoices": [
+                    {
+                        "amount": 100.0,
+                        "due_date": "2023-06-30"
+                    },
+                    {
+                        "amount": 100.0,
+                        "due_date": "2023-06-30"
+                    }
+                ],
+                "cvv": "123"
+            },
+            "currency": "USD",
+            "currency_symbol": "$"
+        }
+        "#;
+
+        let data = serde_json::from_str(data).unwrap();
+
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+            println!("PAIRS LEN: {}", pairs.len());
+            println!("PAIRS: {:?}", pairs);
+
+            assert_eq!(pairs.len(), 21);
+            assert_eq!(
+                pairs[11],
+                ValuePair {
+                    indentation: 2,
+                    key: "invoices".to_string(),
+                    value: None,
+                    is_array_value: false,
+                }
+            );
+        }
+
+        {
+            let mut pairs: Vec<ValuePair> = vec![];
+            app.insert_data_to_tree(&mut pairs, &data, 0);
+
+            assert_eq!(pairs.len(), 21); // The line between `null,` and `"name": "Omar",` is an empty pair on purpose for the UI.
+            assert_eq!(
+                pairs[13],
+                ValuePair {
+                    indentation: 4,
+                    key: "amount".to_string(),
+                    value: Some(serde_json::to_value(100.0).unwrap()),
+                    is_array_value: false,
+                }
+            );
+        }
+    }
+    
 }
