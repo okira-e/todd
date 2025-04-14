@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
 };
@@ -178,7 +179,7 @@ impl App {
             .title("Enter a new key-value pair")
             .title_alignment(Alignment::Center)
             .borders(Borders::NONE)
-            .style(Style::default());
+            .style(Style::default().fg(Color::default()).bg(Color::default()));
         
         let centered_area = get_centered_rect(50, 9, frame.area());
 
