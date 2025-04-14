@@ -62,8 +62,15 @@ use serde_json::Value;
 /// - For performance reasons, no validation is performed on the input JSON structure.
 pub fn get_nested_object_to_insert_into<'og>(steps: usize, obj: &'og mut Value) -> (Option<&'og mut Value>, usize) {
 
+    /// Gives back a vector of indexes to follow like: [4, 2, 0] meaning: the fifth element
+    /// at the root is an object and at that object's third index, there's an object that 
+    /// contains our target it its first index.
+    /// # Implementation
+    /// Runs down the objet, returns a vec with the current index the element is found at,
+    /// then, recursively, the call above us in the chain inserts the current index before
+    /// the value returned.
     fn find_path(current: &mut usize, target: usize, value: &Value) -> Option<Vec<usize>> {
-        match value {
+        return match value {
             Value::Object(map) => {
                 for (i, (_, v)) in map.iter().enumerate() {
                     if *current == target {
@@ -89,7 +96,7 @@ pub fn get_nested_object_to_insert_into<'og>(steps: usize, obj: &'og mut Value) 
                     
                     if v.is_object() || v.is_array() {
                         if let Some(mut path) = find_path(current, target, v) {
-                            path.insert(0, i);
+                            path.insert(0, i); // Insert at 0 in the path vec the current index.
                             return Some(path);
                         }
                     } else {
@@ -99,24 +106,26 @@ pub fn get_nested_object_to_insert_into<'og>(steps: usize, obj: &'og mut Value) 
                 None
             },
             _ => None
-        }
+        };
     }
     
-    // Now follow the path to get a mutable reference
+    /// Follows the path returned from `find_path`.
     fn follow_path<'a>(obj: &'a mut Value, path: &[usize]) -> (Option<&'a mut Value>, usize) {
         if path.is_empty() {
             return (None, 0);
         }
         
-        let idx = path[0];
+        let index_at_the_root = path[0];
         
+        // @Enhancement: Make sure that's the value is not an object or an array when we 
+        // reach it here. If it's not so, return the the obj/arr value with 0 as an index.
         if path.len() == 1 {
-            return (Some(obj), idx);
+            return (Some(obj), index_at_the_root);
         }
         
         match obj {
             Value::Object(map) => {
-                let key = map.keys().nth(idx).cloned();
+                let key = map.keys().nth(index_at_the_root).cloned();
                 if let Some(key) = key {
                     if let Some(value) = map.get_mut(&key) {
                         return follow_path(value, &path[1..]);
@@ -124,8 +133,8 @@ pub fn get_nested_object_to_insert_into<'og>(steps: usize, obj: &'og mut Value) 
                 }
             },
             Value::Array(arr) => {
-                if idx < arr.len() {
-                    if let Some(value) = arr.get_mut(idx) {
+                if index_at_the_root < arr.len() {
+                    if let Some(value) = arr.get_mut(index_at_the_root) {
                         return follow_path(value, &path[1..]);
                     }
                 }
@@ -133,7 +142,7 @@ pub fn get_nested_object_to_insert_into<'og>(steps: usize, obj: &'og mut Value) 
             _ => {}
         }
         
-        (None, 0)
+        return (None, 0);
     }
     
     let mut current = 0;
@@ -182,7 +191,6 @@ mod tests {
             "currency_symbol": "$", // 18
         });
 
-        // Test case 1: Get root object (line 0)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(0, &mut value);
             assert!(obj_ref.is_some());
@@ -191,7 +199,6 @@ mod tests {
             assert!(obj.as_object().unwrap().contains_key("name"));
         }
 
-        // Test case 2: Get the address object (line 2)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(2, &mut value);
             assert!(obj_ref.is_some());
@@ -200,7 +207,6 @@ mod tests {
             assert!(obj.as_object().unwrap().contains_key("address"));
         }
 
-        // Test case 3: Get the billing_info object (line 8)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(8, &mut value);
             assert!(obj_ref.is_some());
@@ -209,7 +215,6 @@ mod tests {
             assert!(obj.as_object().unwrap().contains_key("billing_info"));
         }
 
-        // Test case 4: Get the invoices array (line 11)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(11, &mut value);
             assert!(obj_ref.is_some());
@@ -219,16 +224,15 @@ mod tests {
             assert!(obj.as_object().unwrap()["invoices"].is_array());
         }
 
-        // Test case 5: Get first invoice object (line 12)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(12, &mut value);
+            // println!("DEBUG) INDEX: {} - OBJ: {:?}", index, obj_ref.as_ref().unwrap().as_object().unwrap());
             assert!(obj_ref.is_some());
             let obj = obj_ref.unwrap();
             assert_eq!(index, 0);
             assert!(obj.as_object().unwrap()["amount"].is_number());
         }
 
-        // Test case 6: Get non-existent line (beyond range)
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(20, &mut value);
             assert!(obj_ref.is_none());

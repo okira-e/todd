@@ -22,7 +22,7 @@ pub enum CurrentlyEditing {
     Value,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ValuePair {
     pub indentation: usize,
     pub key: String,
@@ -133,18 +133,22 @@ pub enum ReportedMessageKinds {
 
 #[derive(Debug)]
 pub struct App {
-    /// The currently being edited json key.
+    /// The key element in the popup for inserting new pairs.
     pub key_input: TextInput,
     /// The currently being edited json value.
     pub value_input: TextInput,
     /// The representation of the json file data. It could be an array or an object at the top level.
     pub json: Value,
+    /// Holds all the pairs serialized out of the JSON. Has empty pairs to represent a line separator 
+    /// for the beginning of an array value.
+    pub json_pairs: Vec<ValuePair>,
     /// The current screen the user is looking at, and will later determine what is rendered.
     pub current_screen: CurrentScreen,
     /// The optional state containing which of the key or value pair the user is editing. It is an option, 
     /// because when the user is not directly editing a key-value pair, this will be set to `None`.
     pub currently_editing: Option<CurrentlyEditing>,
-    /// Keeps track of where the current focused line is.
+    /// Keeps track of where the current focused line is. Represents a line in the UI. So if the UI
+    /// needs an empty line, you will find it at it. It doesn't represent the actual count of paris in the JSON.
     pub line_at_cursor: usize,
     /// A temporary message to report in the UI to the user.
     pub message_to_report: RefCell<ReportedMessage>,
@@ -212,14 +216,23 @@ impl App {
             _ => value, // The value is an object or an array. Not even a string.
         };
         
-        // let (object_to_insert_into, index) = get_nested_object_to_insert_into(self.line_at_cursor, &self.json);
-        // if let Some(object_to_insert_into) = object_to_insert_into {
-        //     object_to_insert_into.as_object_mut().unwrap().shift_insert(
-        //         index + 1,
-        //         self.key_input.content().to_string(),
-        //         value,
-        //     );
-        // }
+        let (object_to_insert_into, index) = get_nested_object_to_insert_into(self.line_at_cursor_without_empty_lines(), &mut self.json);
+        if let Some(object_to_insert_into) = object_to_insert_into {
+            // Check if we're at the last index. If yes, just insert, otherwise, insert safely
+            // at `index + 1`.
+            if index > object_to_insert_into.as_object().unwrap().len() - 2 {
+                object_to_insert_into.as_object_mut().unwrap().insert(
+                    self.key_input.content().to_string(),
+                    value,
+                );
+            } else {
+                object_to_insert_into.as_object_mut().unwrap().shift_insert(
+                    index + 1,
+                    self.key_input.content().to_string(),
+                    value,
+                );
+            }
+        }
         
         self.report(
             format!("Inserted new key-value pair: {} -> {}", self.key_input.content(), self.value_input.content()),
@@ -275,6 +288,27 @@ impl App {
         return lines_count;
     }
     
+    /// Returns another version of line_at_cursor that doesn't count empty representation lines.
+    /// Useful for example when we want to step into the json with actual steps count.
+    fn line_at_cursor_without_empty_lines(&self) -> usize {
+        let mut i = 0;
+        let mut empty_lines = 0;
+        for pair in self.json_pairs.iter() {
+            if i == self.line_at_cursor {
+                break;
+            }
+            
+            // Some pairs are None because they represent an empty line in the UI.
+            if pair.key == "" && pair.value.is_none() {
+                empty_lines += 1;
+            }
+            
+            i += 1;
+        }
+        
+        return self.line_at_cursor.saturating_sub(empty_lines);
+    }
+    
     /// Actually does the walking and inserting of all values in the json.
     fn walk_data_tree_for_json(
         &self, 
@@ -295,13 +329,9 @@ impl App {
                 }
             );
             
-            // Convert the `value: Value` to a HashMap.
-            // let new_data: IndexMap<String, Value> = serde_json::from_value(value.clone()).unwrap();
-            let new_data = value;
-            
             *lines_count += self.insert_data_to_tree(
                 pairs,
-                &new_data,
+                &value,
                 indentation_counter
             );
         } else {
@@ -319,11 +349,12 @@ impl App {
                 // Insert all values in the array at once with one more indentation level. No recursion
                 // needed.
                 for it in value.as_array().unwrap() {
-                    *lines_count += 1;
-
                     if it.is_object() {
+                        // No need to increment the lines here.
                         self.walk_data_tree_for_json("", it, pairs, lines_count, indentation_counter + 1);
                     } else {
+                        *lines_count += 1;
+
                         pairs.push(
                             ValuePair {
                                 indentation: indentation_counter + 1, 
@@ -505,12 +536,15 @@ impl Default for App {
             current_screen: CurrentScreen::ViewingFile,
             currently_editing: None,
             line_at_cursor: 0,
+            json_pairs: vec![],
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use indexmap::IndexMap;
+
     use super::*;
 
     #[test]
@@ -692,8 +726,6 @@ mod tests {
         {
             let mut pairs: Vec<ValuePair> = vec![];
             app.insert_data_to_tree(&mut pairs, &data, 0);
-            println!("PAIRS LEN: {}", pairs.len());
-            println!("PAIRS: {:?}", pairs);
 
             assert_eq!(pairs.len(), 21);
             assert_eq!(
@@ -724,4 +756,74 @@ mod tests {
         }
     }
     
+    #[test]
+    fn test_insert_new_pair_from_input() {
+        let data = r#"
+        {
+            "name": "Jane Doe",
+            "age": 9,
+            "address": {
+                "street": "123 Main St",
+                "city": "Anytown",
+                "state": "CA",
+                "zip": "12345"
+            },
+            "salary": "5",
+            "billing_info": {
+                "card_number": "1234567890123456",
+                "expiry_date": "12/25",
+                "invoices": [
+                    {
+                        "amount": 100.0,
+                        "due_date": "2023-06-30"
+                    },
+                    {
+                        "amount": 200.0,
+                        "due_date": "2024-06-30"
+                    }
+                ],
+                "cvv": "123"
+            },
+            "currency_symbol": "$"
+        }
+        "#;
+
+        let mut app = App::default();
+        let data = serde_json::from_str(data).unwrap();
+        app.json = data;
+
+        // Test case: Insert after the first line,
+        {
+            app.key_input = TextInput::new(Some("Title"));
+            app.key_input.set_content("Currency");
+            app.value_input.set_content("USD");
+            app.line_at_cursor = 0;
+            app.insert_new_pair_from_input();
+
+            let json_as_ordered_map = app.json.as_object().unwrap();
+
+            assert_eq!(
+                json_as_ordered_map.iter().nth(1).unwrap(),
+                (&"Currency".to_string(), &serde_json::to_value("USD").unwrap()),
+            );
+        }
+        
+        // Test case: Insert after the third line. Into the object below it.
+        // @NotImplemented: Inserting inside of an object instead of after it because the index
+        // is at an object value.
+        // {
+        //     app.key_input = TextInput::new(Some("Title"));
+        //     app.key_input.set_content("Currency");
+        //     app.value_input.set_content("USD");
+        //     app.line_at_cursor = 2;
+        //     app.insert_new_pair_from_input();
+
+        //     let json_as_ordered_map = app.json.as_object().unwrap().get("address").unwrap().as_object().unwrap();
+
+        //     assert_eq!(
+        //         json_as_ordered_map.iter().nth(0).unwrap(),
+        //         (&"Currency".to_string(), &serde_json::to_value("USD").unwrap()),
+        //     );
+        // }
+    }
 }

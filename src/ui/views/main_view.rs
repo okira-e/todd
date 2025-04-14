@@ -52,6 +52,7 @@ impl App {
             let mut pairs = vec![];
             let lines_count = self.insert_data_to_tree(&mut pairs, &self.json, 0);
             self.lines_count = lines_count;
+            self.json_pairs = pairs.clone();
 
             let focused_pair_style = Style::default().bg(Color::Green).fg(Color::Black);
 
