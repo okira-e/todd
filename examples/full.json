@@ -7,7 +7,7 @@
         "state": "CA",
         "zip": "12345"
     },
-    "salary": "5",
+    "salary": 1500,
     "billing_info": {
         "card_number": "1234567890123456",
         "expiry_date": "12/25",
@@ -21,7 +21,8 @@
                 "due_date": "2024-06-30"
             }
         ],
-        "cvv": "123"
+        "cvv": "123",
+        "saved_cards": [{ "last4": "6789" }, { "last4": "9876" }]
     },
     "currency": "USD",
     "currency_symbol": "$"

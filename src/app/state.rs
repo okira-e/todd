@@ -320,25 +320,19 @@ impl App {
     ) {
         if value.is_object() {
             *lines_count += 1;
-            pairs.push(
-                ValuePair {
-                    indentation: indentation_counter, 
-                    key: key.to_owned(), 
-                    value: None,
-                    is_array_value: false,
-                }
-            );
             
-            *lines_count += self.insert_data_to_tree(
-                pairs,
-                &value,
-                indentation_counter
-            );
-        } else {
-            if value.is_array() {
-                *lines_count += 1;
+            if value.as_object().unwrap().len() == 0 {
                 pairs.push(
-                    ValuePair { 
+                    ValuePair {
+                        indentation: indentation_counter, 
+                        key: key.to_owned(), 
+                        value: None,
+                        is_array_value: false,
+                    }
+                );
+            } else {
+                pairs.push(
+                    ValuePair {
                         indentation: indentation_counter, 
                         key: key.to_owned(), 
                         value: None,
@@ -346,36 +340,42 @@ impl App {
                     }
                 );
                 
-                // Insert all values in the array at once with one more indentation level. No recursion
-                // needed.
-                for it in value.as_array().unwrap() {
-                    if it.is_object() {
-                        // No need to increment the lines here.
-                        self.walk_data_tree_for_json("", it, pairs, lines_count, indentation_counter + 1);
-                    } else {
-                        *lines_count += 1;
-
-                        pairs.push(
-                            ValuePair {
-                                indentation: indentation_counter + 1, 
-                                key: serde_json::from_value(it.clone()).unwrap(), 
-                                value: None,
-                                is_array_value: true,
-                            }
-                        );
-                    }
-                }
-            } else {
-                *lines_count += 1;
-                pairs.push(
-                    ValuePair {
-                        indentation: indentation_counter, 
-                        key: key.to_owned(), 
-                        value: Some(serde_json::from_value(value.clone()).unwrap()),
-                        is_array_value: if key == "" { true } else { false }, // We're in an array.
-                    }
+                *lines_count += self.insert_data_to_tree(
+                    pairs,
+                    &value,
+                    indentation_counter
                 );
             }
+        } else if value.is_array() {
+            *lines_count += 1;
+            pairs.push(
+                ValuePair { 
+                    indentation: indentation_counter, 
+                    key: key.to_owned(), 
+                    value: None,
+                    is_array_value: false,
+                }
+            );
+            
+            // Insert all values in the array at once with one more indentation level. No recursion
+            // needed.
+            for it in value.as_array().unwrap() {
+                if !it.is_object() {
+                    *lines_count += 1;
+                }
+
+                self.walk_data_tree_for_json("", it, pairs, lines_count, indentation_counter + 1);
+            }
+        } else {
+            *lines_count += 1;
+            pairs.push(
+                ValuePair {
+                    indentation: indentation_counter, 
+                    key: key.to_owned(), 
+                    value: Some(serde_json::from_value(value.clone()).unwrap()),
+                    is_array_value: if key == "" { true } else { false }, // We're in an array.
+                }
+            );
         }
     }
 
@@ -543,8 +543,6 @@ impl Default for App {
 
 #[cfg(test)]
 mod tests {
-    use indexmap::IndexMap;
-
     use super::*;
 
     #[test]
@@ -632,8 +630,8 @@ mod tests {
                 pairs[11],
                 ValuePair {
                     indentation: 2,
-                    key: "READ".to_string(),
-                    value: None,
+                    key: String::new(),
+                    value: Some(serde_json::to_value("READ").unwrap()),
                     is_array_value: true,
                 }
             );

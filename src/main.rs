@@ -8,9 +8,6 @@ mod utils;
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     
-    // Create logs directory if it doesn't exist
-    std::fs::create_dir_all("logs")?;
-    
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {

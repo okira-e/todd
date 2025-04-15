@@ -1,0 +1,27 @@
+{
+    "string_examples": "Unicode text with \"quotes\", tabs\t, newlines\n and emoji 🦀",
+    "number_examples": {
+        "integer": 42,
+        "negative": -17,
+        "float": 3.14159,
+        "scientific": 1.23e-4
+    },
+    "boolean_examples": { "true_value": true, "false_value": false },
+    "null_example": null,
+    "array_examples": [
+        "string",
+        123,
+        false,
+        null,
+        { "nested_object": "inside_array" },
+        [1, 2, [3, 4]]
+    ],
+    "nested_object": {
+        "level1": {
+            "level2": {
+                "level3": "deeply nested value"
+            }
+        }
+    },
+    "empty_values": { "empty_object": {}, "empty_array": [] }
+}

@@ -4,7 +4,6 @@
 
 use std::rc::Rc;
 
-use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
 };
@@ -58,13 +57,26 @@ impl App {
             let focused_pair_style = Style::default().bg(Color::Green).fg(Color::Black);
 
             let mut list_items: Vec<ListItem> = vec![];
-            for (i, pair) in pairs.into_iter().enumerate() {
+            let mut array_key_index = 0;
+            let mut last_indentation = 0;
+            for (i, mut pair) in pairs.into_iter().enumerate() {
                 let indentation_padding: String = (0..pair.indentation - 1).map(|_| "    ").collect();
+                
                 let is_line_focused = self.line_at_cursor == i;
                 
                 let list_item = ListItem::new(
-                    match pair.value { // A Line is returned here.
+                    match &pair.value { // A Line is returned here.
                         Some(value) => {
+                            if pair.key == "" {
+                                if last_indentation != pair.indentation {
+                                    last_indentation = pair.indentation;
+                                    array_key_index = 0;
+                                }
+
+                                array_key_index += 1;
+                                pair.key = format!("{}", array_key_index);
+                            }
+                            
                             let indentation_and_key_span = Span::from(format!("{}{}: ", indentation_padding, pair.key));
 
                             // Colorize the value part of the line/pair based on the type of the value. Kinda like syntax highlighting.
@@ -82,6 +94,16 @@ impl App {
                             indentation_and_key_span + value_span // Concatenating two `Span`s makeup a `Line`.
                         },
                         None => {
+                            if last_indentation != pair.indentation {
+                                last_indentation = pair.indentation;
+                                array_key_index = 0;
+                            }
+
+                            if pair.key == "" {
+                                array_key_index += 1;
+                                pair.key = format!("{}", array_key_index);
+                            }
+                            
                             // Match against if this key's value is an array or another object.
                             match pair.is_array_value {
                                 true => {

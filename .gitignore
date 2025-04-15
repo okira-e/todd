@@ -4,5 +4,7 @@
 .vscode
 codebook.toml
 
+output.txt
+
 # macOS
 **/.DS_Store
