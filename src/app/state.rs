@@ -1,4 +1,4 @@
-use std::{cell::RefCell, time::{Duration, Instant}};
+use std::{cell::RefCell, fs::Metadata, time::{Duration, Instant}};
 
 use color_eyre::Result;
 use ratatui::
@@ -154,17 +154,21 @@ pub struct App {
     pub message_to_report: RefCell<ReportedMessage>,
     /// The total number of lines drawn (counts nested objects).
     pub lines_count: usize,
+    // @Fix: It's an Option because of tests and maintaining the default() method. Change all the tests to read
+    // from a file to make this non-optional.
+    pub file_metadata: Option<Metadata>,
     running: bool,
 }
 
 impl App {
     /// Construct the app and sets the JSON data.
-    pub fn new(json_content: &str) -> Result<Self> {
+    pub fn new(json_content: &str, file_metadata: Option<Metadata>) -> Result<Self> {
         let mut app = Self::default();
 
         // app.json = JsonData::new(json_content)?;
         let json = serde_json::from_str(json_content)?;
         app.json = json;
+        app.file_metadata = file_metadata;
 
         return Ok(app);
     }
@@ -532,6 +536,7 @@ impl Default for App {
             currently_editing: None,
             line_at_cursor: 0,
             json_pairs: vec![],
+            file_metadata: None,
         }
     }
 }
@@ -854,7 +859,7 @@ mod tests {
         }
         "#;
 
-        let mut app = App::new(data).unwrap();
+        let mut app = App::new(data, None).unwrap();
         let mut pairs = vec![];
         let lines_count = app.insert_data_to_tree(&mut pairs, &app.json, 0);
         app.lines_count = lines_count;

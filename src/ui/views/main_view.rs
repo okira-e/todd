@@ -138,22 +138,40 @@ impl App {
     fn draw_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
         // Check if we have a fresh (unexpired) message to report to the user.
         // that message is displayed in the footer in place of the usual keymap footer.
-        let footer = if self.message_to_report.borrow().show_time.elapsed() >= self.message_to_report.borrow().show_duration {
+        let keymap_footer = Paragraph::new(
+            Line::from(
+                match self.current_screen {
+                    CurrentScreen::ViewingFile => Span::from(
+                        "(q) to quit / (i) to make new pair",
+                    ),
+                    CurrentScreen::Editing => Span::from(
+                        "(ESC) to cancel/(Tab) to switch boxes/enter to complete",
+                    ),
+                }
+            )
+        )
+        .block(
+            Block::default().borders(Borders::ALL).padding(Padding::left(1))
+        );
+        
+        let root_len = match &self.json {
+            serde_json::Value::Array(values) => values.len(),
+            serde_json::Value::Object(map) => map.len(),
+            _ => 0,
+        };
+        let file_info_footer = if self.message_to_report.borrow().show_time.elapsed() >= self.message_to_report.borrow().show_duration { 
             Paragraph::new(
-                Line::from(
-                    match self.current_screen {
-                        CurrentScreen::ViewingFile => Span::from(
-                            "(q) to quit / (i) to make new pair",
-                        ),
-                        CurrentScreen::Editing => Span::from(
-                            "(ESC) to cancel/(Tab) to switch boxes/enter to complete",
-                        ),
-                    }
-                )
+                Line::from(vec![
+                    if let Some(metadata) = &self.file_metadata { Span::from(format!("File size: {} Bytes", metadata.len())) } else { Span::from("File size: N/A") },
+                    Span::from(format!(", Parent length: {}", root_len)),
+                    Span::from(format!(", Current line: {}", self.line_at_cursor)),
+                ])
             )
             .block(
-                Block::default().borders(Borders::ALL)
-            )
+                Block::default()
+                    .borders(Borders::ALL)
+                    .padding(Padding::left(1))
+            ) 
         } else {
             Paragraph::new(
                 Line::from(
@@ -175,13 +193,17 @@ impl App {
                 Block::default().borders(Borders::ALL)
             )
         };
-        
+
         let footer_layout = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(100)])
+            .constraints([
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ])
             .split(layout[1]);
         
-        frame.render_widget(footer, footer_layout[0]);
+        frame.render_widget(keymap_footer, footer_layout[0]);
+        frame.render_widget(file_info_footer, footer_layout[1]);
     }
     
     fn draw_insert_popup_widget(&mut self, frame: &mut Frame) {

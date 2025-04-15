@@ -1,4 +1,4 @@
-use std::{env, fs::File, io::Read, process::{self, exit}};
+use std::{env, fs::{self, File}, io::Read, process::{self, exit}};
 use app::state::App;
 
 mod app;
@@ -15,7 +15,8 @@ fn main() -> color_eyre::Result<()> {
         exit(1);
     }
 
-    let mut file = match File::open(args[1].clone()) {
+    let file_path = args[1].clone();
+    let mut file = match File::open(file_path.clone()) {
         Ok(val) => val,
         Err(err) => {
             eprintln!("Failed to open file: {}", err);
@@ -30,9 +31,11 @@ fn main() -> color_eyre::Result<()> {
         process::exit(0);
     }
     
+    let file_metadata = fs::metadata(file_path)?;
+    
     let terminal = ratatui::init();
 
-    let app = App::new(&file_content)?;
+    let app = App::new(&file_content, Some(file_metadata))?;
     let app_result = app.run(terminal);
     
     ratatui::restore();
