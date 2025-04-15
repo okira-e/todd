@@ -226,7 +226,6 @@ mod tests {
 
         {
             let (obj_ref, index) = get_nested_object_to_insert_into(12, &mut value);
-            // println!("DEBUG) INDEX: {} - OBJ: {:?}", index, obj_ref.as_ref().unwrap().as_object().unwrap());
             assert!(obj_ref.is_some());
             let obj = obj_ref.unwrap();
             assert_eq!(index, 0);

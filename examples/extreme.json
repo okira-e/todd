@@ -14,7 +14,7 @@
         false,
         null,
         { "nested_object": "inside_array" },
-        [1, 2, [3, 4]]
+        ["first", "second", ["third", "fourth"]]
     ],
     "nested_object": {
         "level1": {

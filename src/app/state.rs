@@ -360,10 +360,6 @@ impl App {
             // Insert all values in the array at once with one more indentation level. No recursion
             // needed.
             for it in value.as_array().unwrap() {
-                if !it.is_object() {
-                    *lines_count += 1;
-                }
-
                 self.walk_data_tree_for_json("", it, pairs, lines_count, indentation_counter + 1);
             }
         } else {
@@ -524,7 +520,6 @@ impl Default for App {
             running: false,
             key_input: TextInput::new(Some("Key")),
             value_input: TextInput::new(Some("Value")),
-            // json: IndexMap::<String, Value>::new(),
             json: Value::default(),
             lines_count: 0,
             message_to_report: RefCell::new(ReportedMessage {
@@ -540,6 +535,7 @@ impl Default for App {
         }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -823,5 +819,64 @@ mod tests {
         //         (&"Currency".to_string(), &serde_json::to_value("USD").unwrap()),
         //     );
         // }
+    }
+    
+    
+    #[test]
+    fn test_lines_count() {
+        let data = r#"
+        {
+            "string_examples": "Unicode text with \"quotes\", tabs\t, newlines\n and emoji 🦀",
+            "number_examples": {
+                "integer": 42,
+                "negative": -17,
+                "float": 3.14159,
+                "scientific": 1.23e-4
+            },
+            "boolean_examples": { "true_value": true, "false_value": false },
+            "null_example": null,
+            "array_examples": [
+                "string",
+                123,
+                false,
+                null,
+                { "nested_object": "inside_array" },
+                [1, 2, [3, 4]]
+            ],
+            "nested_object": {
+                "level1": {
+                    "level2": {
+                        "level3": "deeply nested value"
+                    }
+                }
+            },
+            "empty_values": { "empty_object": {}, "empty_array": [] }
+        }
+        "#;
+
+        let mut app = App::new(data).unwrap();
+        let mut pairs = vec![];
+        let lines_count = app.insert_data_to_tree(&mut pairs, &app.json, 0);
+        app.lines_count = lines_count;
+        app.json_pairs = pairs.clone();
+        
+        {
+            assert_eq!(
+                app.lines_count,
+                30,
+            );
+        }
+
+        {
+            // Move 100 times. Shouldn't move more than the actual count of lines.
+            for _ in 0..100 {
+                app.update(Action::MainView(MainViewActions::MoveDown));
+            }
+
+            assert_eq!(
+                app.line_at_cursor,
+                29,
+            );
+        }
     }
 }

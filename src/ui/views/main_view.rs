@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
+    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
 };
 
 use crate::{app::state::{App, CurrentScreen, CurrentlyEditing, ReportedMessageKinds}, ui::helpers::get_centered_rect};
@@ -16,13 +16,11 @@ impl App {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
                 Constraint::Min(1),
                 Constraint::Length(3),
             ])
             .split(frame.area());
         
-        self.draw_title_widget(frame, &layout);
         self.draw_pairs_widget(frame, &layout);
         self.draw_footer_widget(frame, &layout);
 
@@ -134,17 +132,7 @@ impl App {
                 )
         };
     
-        frame.render_widget(list_widget, layout[1]);
-    }
-    
-    fn draw_title_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
-        let title = Paragraph::new(Text::styled(
-            "Create New Json",
-            Style::default().fg(Color::Green),
-        ))
-        .block(Block::default().borders(Borders::ALL));
-    
-        frame.render_widget(title, layout[0]);
+        frame.render_widget(list_widget, layout[0]);
     }
     
     fn draw_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
@@ -191,7 +179,7 @@ impl App {
         let footer_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(100)])
-            .split(layout[2]);
+            .split(layout[1]);
         
         frame.render_widget(footer, footer_layout[0]);
     }
