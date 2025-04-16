@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fs::Metadata, time::{Duration, Instant}};
+use std::{cell::RefCell, fs::{File, Metadata}, io::{Seek, Write}, time::{Duration, Instant}};
 
 use color_eyre::Result;
 use ratatui::
@@ -132,7 +132,7 @@ pub enum ReportedMessageKinds {
 // }
 
 #[derive(Debug)]
-pub struct App {
+pub struct App<'a> {
     /// The key element in the popup for inserting new pairs.
     pub key_input: TextInput,
     /// The currently being edited json value.
@@ -157,18 +157,19 @@ pub struct App {
     // @Fix: It's an Option because of tests and maintaining the default() method. Change all the tests to read
     // from a file to make this non-optional.
     pub file_metadata: Option<Metadata>,
+    file: Option<&'a mut File>,
     running: bool,
 }
 
-impl App {
+impl<'a> App<'a> {
     /// Construct the app and sets the JSON data.
-    pub fn new(json_content: &str, file_metadata: Option<Metadata>) -> Result<Self> {
+    pub fn new(json_content: &str, file_metadata: Option<Metadata>, file: Option<&'a mut File>) -> Result<Self> {
         let mut app = Self::default();
 
-        // app.json = JsonData::new(json_content)?;
         let json = serde_json::from_str(json_content)?;
         app.json = json;
         app.file_metadata = file_metadata;
+        app.file = file;
 
         return Ok(app);
     }
@@ -198,7 +199,21 @@ impl App {
     }
     
     /// Inserts the from the user popup to the file/data.
-    pub fn insert_new_pair_from_input(&mut self) {
+    pub fn insert_new_data_from_user_input(&mut self) {
+        match self.is_inside_array() {
+            true => {
+                if self.value_input.content().to_string().is_empty() {
+                    return;
+                }
+            }
+            false => {
+                if self.key_input.content().to_string().is_empty() || self.value_input.content().to_string().is_empty() {
+                    return;
+                }
+            }
+        };
+        
+        
         let value = serde_json::to_value(self.value_input.content()).unwrap();
         
         // Serialize/Parse the value to its correct type by trying to parse it.
@@ -222,19 +237,28 @@ impl App {
         
         let (object_to_insert_into, index) = get_nested_object_to_insert_into(self.line_at_cursor_without_empty_lines(), &mut self.json);
         if let Some(object_to_insert_into) = object_to_insert_into {
-            // Check if we're at the last index. If yes, just insert, otherwise, insert safely
-            // at `index + 1`.
-            if index > object_to_insert_into.as_object().unwrap().len() - 2 {
-                object_to_insert_into.as_object_mut().unwrap().insert(
-                    self.key_input.content().to_string(),
-                    value,
-                );
-            } else {
-                object_to_insert_into.as_object_mut().unwrap().shift_insert(
-                    index + 1,
-                    self.key_input.content().to_string(),
-                    value,
-                );
+            
+            match object_to_insert_into {
+                Value::Object(map) => {
+                    // Check if we're at the last index. If yes, just insert, otherwise, insert safely
+                    // at `index + 1`.
+                    if index > map.len() - 2 {
+                        map.insert(
+                            self.key_input.content().to_string(),
+                            value,
+                        );
+                    } else {
+                        map.shift_insert(
+                            index + 1,
+                            self.key_input.content().to_string(),
+                            value,
+                        );
+                    }
+                },
+                Value::Array(values) => {
+                    values.insert(index + 1, value);
+                },
+                _ => {}
             }
         }
         
@@ -243,6 +267,39 @@ impl App {
             ReportedMessageKinds::Success,
             Duration::from_secs(3)
         );
+
+        if let Some(file) = self.file.as_mut() {
+            // Clear the file by truncating it to 0 bytes
+            if let Err(err) = file.set_len(0) {
+                self.report(
+                    format!("Failed to clear file: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+                return;
+            }
+            
+            // Reset file position to the beginning
+            if let Err(err) = file.seek(std::io::SeekFrom::Start(0)) {
+                self.report(
+                    format!("Failed to reset file position: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+                return;
+            }
+            
+            // Write the new JSON content directly to the file
+            if let Err(err) = serde_json::to_writer_pretty(file, &self.json) {
+                self.report(
+                    format!("Failed to save changes: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+            }
+        }
+
+        self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
     }
 
     pub fn toggle_editing(&mut self) {
@@ -250,15 +307,22 @@ impl App {
         match &self.currently_editing {
             Some(edit_mode) => {
                 match edit_mode {
-                    CurrentlyEditing::Key => self.currently_editing = Some(CurrentlyEditing::Value),
-                    CurrentlyEditing::Value => self.currently_editing = Some(CurrentlyEditing::Key),
+                    CurrentlyEditing::Key => {
+                        self.currently_editing = Some(CurrentlyEditing::Value);
+                    }
+                    CurrentlyEditing::Value => {
+                        // There is no key input to toggle into if we're inserting to an array.
+                        if !self.is_inside_array() { 
+                            self.currently_editing = Some(CurrentlyEditing::Key);
+                        }
+                    }
                 };
             }
             None => {
                 self.current_screen = CurrentScreen::Editing;
-                self.currently_editing = Some(CurrentlyEditing::Key);
+                self.currently_editing = if !self.is_inside_array() { Some(CurrentlyEditing::Key) } else { Some(CurrentlyEditing::Value) };
             }
-        }
+        };
     }
     
     /// Set running to false to quit the application.
@@ -290,6 +354,16 @@ impl App {
         }
         
         return lines_count;
+    }
+    
+    /// Tells us if the cursor is currently inside an array parent.
+    pub fn is_inside_array(&mut self) -> bool {
+        let (object_to_insert_into, _) = get_nested_object_to_insert_into(self.line_at_cursor_without_empty_lines(), &mut self.json);
+        
+        return match object_to_insert_into {
+            Some(val) => val.is_array(),
+            None => false,
+        };
     }
     
     /// Returns another version of line_at_cursor that doesn't count empty representation lines.
@@ -474,7 +548,7 @@ impl App {
                 }
             },
             EditingAction::Submit => {
-                self.insert_new_pair_from_input();
+                self.insert_new_data_from_user_input();
             },
         }
     }
@@ -518,7 +592,7 @@ impl App {
     }
 }
 
-impl Default for App {
+impl Default for App<'_> {
     fn default() -> Self {
         Self {
             running: false,
@@ -537,6 +611,7 @@ impl Default for App {
             line_at_cursor: 0,
             json_pairs: vec![],
             file_metadata: None,
+            file: None,
         }
     }
 }
@@ -797,7 +872,7 @@ mod tests {
             app.key_input.set_content("Currency");
             app.value_input.set_content("USD");
             app.line_at_cursor = 0;
-            app.insert_new_pair_from_input();
+            app.insert_new_data_from_user_input();
 
             let json_as_ordered_map = app.json.as_object().unwrap();
 
@@ -859,7 +934,7 @@ mod tests {
         }
         "#;
 
-        let mut app = App::new(data, None).unwrap();
+        let mut app = App::new(data, None, None).unwrap();
         let mut pairs = vec![];
         let lines_count = app.insert_data_to_tree(&mut pairs, &app.json, 0);
         app.lines_count = lines_count;

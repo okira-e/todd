@@ -3,7 +3,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use super::state::{Action, App, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction};
 
 
-impl App {
+impl<'a> App<'a> {
     pub fn handle_crossterm_events(&mut self) -> Result<()> {
         match event::read()? {
             // it's important to check KeyEventKind::Press to avoid handling key release events
@@ -41,10 +41,7 @@ impl App {
             
             CurrentScreen::Editing => match (key.modifiers, key.code) {
                 (_, KeyCode::Enter) => {
-                    if !self.key_input.content().to_string().is_empty() && !self.value_input.content().to_string().is_empty() {
-                        self.update(Action::Editing(EditingAction::Submit));
-                        self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
-                    }
+                    self.update(Action::Editing(EditingAction::Submit));
                 }
                 
                 (_, KeyCode::Backspace) => {
@@ -69,16 +66,7 @@ impl App {
                 }
                 
                 (_, KeyCode::Tab) => {
-                    if let Some(currently_editing) = &self.currently_editing {
-                        match currently_editing {
-                            CurrentlyEditing::Key => {
-                                self.update(Action::Editing(EditingAction::SwitchToValue));
-                            },
-                            CurrentlyEditing::Value => {
-                                self.update(Action::Editing(EditingAction::SwitchToKey));
-                            },
-                        }
-                    }
+                    self.update(Action::AppNavigation(AppNavigationAction::ToEditingScreen)); // Has the logic of switching between the inputs.
                 }
                 
                 (_, KeyCode::Char(value)) => {

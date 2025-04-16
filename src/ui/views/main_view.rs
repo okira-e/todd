@@ -11,7 +11,7 @@ use ratatui::{
 use crate::{app::state::{App, CurrentScreen, CurrentlyEditing, ReportedMessageKinds}, ui::helpers::get_centered_rect};
 
 
-impl App {
+impl<'a> App<'a> {
     pub fn draw_main_view(&mut self, frame: &mut Frame) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -207,32 +207,55 @@ impl App {
     }
     
     fn draw_insert_popup_widget(&mut self, frame: &mut Frame) {
+        let title_text = if !self.is_inside_array() {
+            "Enter a new key-value pair"
+        } else {
+            "Add a new value"
+        };
+        
         let editing_popup = Block::default()
-            .title("Enter a new key-value pair")
+            .title(title_text)
             .title_alignment(Alignment::Center)
             .borders(Borders::NONE)
             .style(Style::default().fg(Color::default()).bg(Color::default()));
         
         let centered_area = get_centered_rect(50, 9, frame.area());
 
-        let layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .margin(1)
-            .constraints([
-                Constraint::Percentage(50), 
-                Constraint::Percentage(50),
-            ])
-            .split(centered_area);
-        
-        // Update focus based on currently_editing
-        if let Some(editing) = &self.currently_editing {
-            frame.render_widget(editing_popup, centered_area);
+        if !self.is_inside_array() {
+            let layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .margin(1)
+                .constraints([
+                    Constraint::Percentage(50), 
+                    Constraint::Percentage(50),
+                ])
+                .split(centered_area);
             
-            self.key_input.is_focused = *editing == CurrentlyEditing::Key;
-            self.value_input.is_focused = *editing == CurrentlyEditing::Value;
+            // Update focus based on currently_editing
+            if let Some(editing) = &self.currently_editing {
+                frame.render_widget(editing_popup, centered_area);
+
+                self.key_input.is_focused = *editing == CurrentlyEditing::Key;
+                self.value_input.is_focused = *editing == CurrentlyEditing::Value;
+                
+                self.key_input.render_to_frame(frame, layout[0]);
+                self.value_input.render_to_frame(frame, layout[1]);
+            }
+        } else {
+            let layout = Layout::default()
+                .margin(1)
+                .constraints([
+                    Constraint::Percentage(100), 
+                ])
+                .split(centered_area);
             
-            self.key_input.render_to_frame(frame, layout[0]);
-            self.value_input.render_to_frame(frame, layout[1]);
+            if let Some(editing) = &self.currently_editing {
+                frame.render_widget(editing_popup, centered_area);
+                
+                self.value_input.is_focused = *editing == CurrentlyEditing::Value;
+                
+                self.value_input.render_to_frame(frame, layout[0]);
+            }
         }
     }
 }

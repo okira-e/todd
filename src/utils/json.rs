@@ -57,6 +57,8 @@ use serde_json::Value;
 ///
 /// # Note
 ///
+/// - It returns a mutable reference of the nested object, and doesn't actually
+/// anything itself.
 /// - Positions are counted in a depth-first traversal order.
 /// - The function returns the parent container, not the element itself.
 /// - For performance reasons, no validation is performed on the input JSON structure.
