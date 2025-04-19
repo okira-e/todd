@@ -38,7 +38,13 @@ fn main() -> color_eyre::Result<()> {
     
     let terminal = ratatui::init();
 
-    let app = App::new(&file_content, Some(file_metadata), Some(&mut file))?;
+    let app = App::new(
+        &file_content, 
+        Some(file_metadata), 
+        Some(&mut file),
+        terminal.size().unwrap().clone(),
+    )?;
+
     let app_result = app.run(terminal);
     
     ratatui::restore();

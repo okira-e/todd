@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, List, ListItem, Padding, Paragraph}, Frame
+    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame
 };
 
 use crate::{app::state::{App, CurrentScreen, CurrentlyEditing, ReportedMessageKinds}, ui::helpers::get_centered_rect};
@@ -20,6 +20,8 @@ impl<'a> App<'a> {
                 Constraint::Length(3),
             ])
             .split(frame.area());
+        
+        self.viewport_lines_count = layout[0].height as usize;
         
         self.draw_pairs_widget(frame, &layout);
         self.draw_footer_widget(frame, &layout);
@@ -36,13 +38,11 @@ impl<'a> App<'a> {
             self.json.as_array().unwrap().len()
         };
         
-        let list_widget = if json_length == 0 {
-            List::new(
+        let list_paragraph_widget = if json_length == 0 {
+            Paragraph::new(
                 vec![
-                    ListItem::new(
-                        Line::from(
-                            "Object is empty."
-                        ),
+                    Line::from(
+                        "Object is empty."
                     ),
                 ],
             )
@@ -54,15 +54,15 @@ impl<'a> App<'a> {
 
             let focused_pair_style = Style::default().bg(Color::Green).fg(Color::Black);
 
-            let mut list_items: Vec<ListItem> = vec![];
+            let mut lines: Vec<Line> = vec![];
             let mut array_key_index = 0;
             let mut last_indentation = 0;
             for (i, mut pair) in pairs.into_iter().enumerate() {
                 let indentation_padding: String = (0..pair.indentation - 1).map(|_| "    ").collect();
-                
+
                 let is_line_focused = self.line_at_cursor == i;
-                
-                let list_item = ListItem::new(
+
+                let mut line = Line::from(
                     match &pair.value { // A Line is returned here.
                         Some(value) => {
                             if pair.key == "" {
@@ -84,6 +84,8 @@ impl<'a> App<'a> {
                                     value_span = value_span.style(Style::default().fg(Color::Red));
                                 } else if value.is_number() {
                                     value_span = value_span.style(Style::default().fg(Color::Rgb(212, 188, 125))); // yellowish color.
+                                } else if value.is_null() {
+                                    value_span = value_span.style(Style::default().fg(Color::Rgb(243, 139, 168))); // pinkish color.
                                 } else {
                                     value_span = value_span.style(Style::default().fg(Color::Green));
                                 }
@@ -121,18 +123,32 @@ impl<'a> App<'a> {
                         if is_line_focused { focused_pair_style } else { Style::default() },
                     ),
                 );
-    
-                list_items.push(list_item);
+
+                // Fill up the line till the end of the terminal's width to have the hover background
+                // span the entire line in the terminal and not just cover the text characters.
+                // Purely cosmetic.
+                if is_line_focused {
+                    let terminal_width = self.size.width as usize;
+                    let content_length: usize = line.iter().map(|span| span.width()).sum(); 
+
+                    if content_length < terminal_width {
+                        let padding = " ".repeat(terminal_width - content_length);
+                        let padding_span = Span::styled(padding, focused_pair_style);
+                        line.push_span(padding_span);
+                    }
+                }
+
+                lines.push(line);
             }
 
+            self.vertical_scroll_state = self.vertical_scroll_state.content_length(lines.len());
             
-            List::new(list_items)
-                .block(
-                    Block::default().padding(Padding::horizontal(2))
-                )
+            Paragraph::new(lines)
+                .block(Block::default().padding(Padding::horizontal(2)))
+                .scroll((self.vertical_scroll as u16, 0))
         };
-    
-        frame.render_widget(list_widget, layout[0]);
+
+        frame.render_widget(list_paragraph_widget, layout[0]);
     }
     
     fn draw_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
@@ -162,9 +178,20 @@ impl<'a> App<'a> {
         let file_info_footer = if self.message_to_report.borrow().show_time.elapsed() >= self.message_to_report.borrow().show_duration { 
             Paragraph::new(
                 Line::from(vec![
-                    if let Some(metadata) = &self.file_metadata { Span::from(format!("File size: {} Bytes", metadata.len())) } else { Span::from("File size: N/A") },
+                    if let Some(metadata) = &self.file_metadata {
+                        let size = if metadata.len() > 1024 {
+                            format!("{} KB", metadata.len() / 1024)
+                        } else {
+                            format!("{} Bytes", metadata.len())
+                        };
+                        
+                        Span::from(format!("File size: {} Bytes", size))
+                    } else {
+                        Span::from("File size: N/A")
+                    },
                     Span::from(format!(", Parent length: {}", root_len)),
-                    Span::from(format!(", Current line: {}", self.line_at_cursor)),
+                    Span::from(format!(", Total lines: {}", self.lines_count)),
+                    Span::from(format!(", Current line: {}", self.line_at_cursor + 1)),
                 ])
             )
             .block(

@@ -1,8 +1,7 @@
-use std::{cell::RefCell, fs::{File, Metadata}, io::{Seek, Write}, time::{Duration, Instant}};
+use std::{cell::RefCell, fs::{File, Metadata}, io::Seek, time::{Duration, Instant}};
 
 use color_eyre::Result;
-use ratatui::
-    DefaultTerminal
+use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
@@ -45,8 +44,13 @@ pub enum AppNavigationAction {
 pub enum MainViewActions{
     MoveDown,
     MoveUp,
+    MoveToTop,
+    MoveToBottom,
+    MoveHalfPageDown,
+    MoveHalfPageUp,
 }
 
+#[allow(dead_code)]
 pub enum EditingAction {
     SwitchToKey,
     SwitchToValue,
@@ -88,49 +92,8 @@ pub enum ReportedMessageKinds {
     Success,
 }
 
-// /// Represents the data in the file.
-// #[derive(Debug)]
-// struct JsonData {
-//     pub is_array: bool,
-//     object: IndexMap<String, Value>,
-//     array: Vec<Value>,
-// }
 
-// impl JsonData {
-//     pub fn new(json_content: &str) -> color_eyre::Result<Self> {
-//         let mut ret = Self {
-//             is_array: false,
-//             array: vec![],
-//             object: IndexMap::new(),
-//         };
-        
-//         let parsed: Value = serde_json::from_str(json_content)?;
-        
-//         match parsed {
-//             Value::Object(map) => {
-//                 // Convert to IndexMap if needed
-//                 let index_map: IndexMap<String, Value> = map.into_iter().collect();
-                
-//                 ret.object = index_map;
-//             },
-//             Value::Array(arr) => {
-//                 ret.is_array = true;
-//                 ret.array = arr;
-//             },
-//             _ => {
-//                 // Handle primitive values (string, number, bool, null)
-//                 // You could wrap them in an array or create a single-item object
-//                 let mut map = IndexMap::new();
-//                 map.insert("root".to_string(), parsed);
-
-//                 ret.object = map;
-//             }
-//         };
-        
-//         return Ok(ret);
-//     }
-// }
-
+/// Represents the parent app state.
 #[derive(Debug)]
 pub struct App<'a> {
     /// The key element in the popup for inserting new pairs.
@@ -154,22 +117,33 @@ pub struct App<'a> {
     pub message_to_report: RefCell<ReportedMessage>,
     /// The total number of lines drawn (counts nested objects).
     pub lines_count: usize,
+    pub viewport_lines_count: usize,
+    pub vertical_scroll_state: ScrollbarState,
+    pub vertical_scroll: usize,
+    pub scrolled_so_far: usize,
     // @Fix: It's an Option because of tests and maintaining the default() method. Change all the tests to read
     // from a file to make this non-optional.
     pub file_metadata: Option<Metadata>,
+    pub size: Size,
     file: Option<&'a mut File>,
     running: bool,
 }
 
 impl<'a> App<'a> {
     /// Construct the app and sets the JSON data.
-    pub fn new(json_content: &str, file_metadata: Option<Metadata>, file: Option<&'a mut File>) -> Result<Self> {
+    pub fn new(
+        json_content: &str, 
+        file_metadata: Option<Metadata>, 
+        file: Option<&'a mut File>,
+        size: Size,
+    ) -> Result<Self> {
         let mut app = Self::default();
 
         let json = serde_json::from_str(json_content)?;
         app.json = json;
         app.file_metadata = file_metadata;
         app.file = file;
+        app.size = size;
 
         return Ok(app);
     }
@@ -470,14 +444,72 @@ impl<'a> App<'a> {
     }
     
     fn handle_main_view_messages(&mut self, action: MainViewActions) {
+        let scroll_offset = 5;
+
         match action {
             MainViewActions::MoveDown => {
                 if self.line_at_cursor + 1 < self.lines_count {
                     self.line_at_cursor += 1;
+
+                    if self.is_current_line_at_viewport_end_with_offset(Some(scroll_offset)) {
+                        self.vertical_scroll += 1;
+                        self.scrolled_so_far += 1;
+                    }
                 }
-            },
+            }
             MainViewActions::MoveUp => {
                 self.line_at_cursor = self.line_at_cursor.saturating_sub(1);
+                
+                if self.is_current_line_at_viewport_start_with_offset(Some(scroll_offset)) {
+                    self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
+                    self.scrolled_so_far = self.scrolled_so_far.saturating_sub(1);
+                }
+            }
+            MainViewActions::MoveToTop => {
+                if self.lines_count == 0 {
+                    return;
+                }
+
+                self.line_at_cursor = 0;
+                self.vertical_scroll = 0;
+                self.scrolled_so_far = 0;
+            }
+            MainViewActions::MoveToBottom => {
+                if self.lines_count == 0 {
+                    return;
+                }
+
+                self.line_at_cursor = self.lines_count.saturating_sub(1);
+                self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count);
+                self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count);
+            }
+            MainViewActions::MoveHalfPageDown => {
+                if self.lines_count == 0 {
+                    return;
+                }
+
+                if self.line_at_cursor < (self.lines_count.saturating_sub(self.viewport_lines_count / 2)) {
+                    self.line_at_cursor += self.viewport_lines_count / 2;
+                    self.vertical_scroll += self.viewport_lines_count / 2;
+                    self.scrolled_so_far += self.viewport_lines_count / 2;
+                } else {
+                    self.line_at_cursor += self.lines_count - self.line_at_cursor - 1;
+                    self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
+                    self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
+                }
+            },
+            MainViewActions::MoveHalfPageUp => {
+                if self.lines_count == 0 {
+                    return;
+                }
+
+                if self.line_at_cursor > self.viewport_lines_count / 2 {
+                    self.line_at_cursor = self.line_at_cursor.saturating_sub(self.viewport_lines_count / 2);
+                    self.vertical_scroll = self.vertical_scroll.saturating_sub(self.viewport_lines_count / 2);
+                    self.scrolled_so_far = self.scrolled_so_far.saturating_sub(self.viewport_lines_count / 2);
+                } else {
+                    self.update(Action::MainView(MainViewActions::MoveToTop));
+                }
             },
         }
     }
@@ -514,21 +546,11 @@ impl<'a> App<'a> {
                             focused_text_input.move_cursor_left();
                         }
                     },
-                    // CursorDirection::Up => {
-                    //     if let Some(focused_text_input) = self.get_focused_text_input() {
-
-                    //     }
-                    // },
                     CursorDirection::Right => {
                         if let Some(focused_text_input) = self.get_focused_text_input() {
                             focused_text_input.move_cursor_right();
                         }
                     },
-                    // CursorDirection::Down => {
-                    //     if let Some(focused_text_input) = self.get_focused_text_input() {
-
-                    //     }
-                    // },
                 }
             }
             EditingAction::AppendToKey(c) => {
@@ -567,19 +589,45 @@ impl<'a> App<'a> {
                 CurrentlyEditing::Key => {
                     if self.key_input.is_focused {
                         return Some(&mut self.key_input);
-                        // self.update(Action::Editing(EditingAction::AppendToKey(c)));
                     }
                 }
                 CurrentlyEditing::Value => {
                     if self.value_input.is_focused {
                         return Some(&mut self.value_input);
-                        // self.update(Action::Editing(EditingAction::AppendToValue(c)));
                     }
                 }
             }
         }
         
         return None;
+    }
+    
+    /// Tells us whether the currently focused line is at or near the end of the viewport.
+    /// 
+    /// This function is useful for auto-scrolling behavior when the cursor approaches
+    /// the bottom of the viewport.
+    fn is_current_line_at_viewport_end_with_offset(&self, offset: Option<usize>) -> bool {
+        let offset = if offset.unwrap_or(0) > self.lines_count {
+            0
+        } else {
+            offset.unwrap_or(0)
+        };
+
+        return self.line_at_cursor >= ((self.viewport_lines_count + self.scrolled_so_far).saturating_sub(offset));
+    }
+
+    /// Tells us whether the currently focused line is at the start of the viewport.
+    /// 
+    /// This function is useful for auto-scrolling behavior when the cursor approaches
+    /// the top of the viewport.
+    fn is_current_line_at_viewport_start_with_offset(&self, offset: Option<usize>) -> bool {
+        let offset = if offset.unwrap_or(0) > self.lines_count {
+            0
+        } else {
+            offset.unwrap_or(0)
+        };
+
+        return self.line_at_cursor <= (self.scrolled_so_far + offset);
     }
     
     pub fn report(&self, message: String, kind: ReportedMessageKinds, duration: Duration) {
@@ -600,6 +648,7 @@ impl Default for App<'_> {
             value_input: TextInput::new(Some("Value")),
             json: Value::default(),
             lines_count: 0,
+            viewport_lines_count: 0,
             message_to_report: RefCell::new(ReportedMessage {
                 message: "".to_string(),
                 show_time: Instant::now(),
@@ -612,6 +661,10 @@ impl Default for App<'_> {
             json_pairs: vec![],
             file_metadata: None,
             file: None,
+            vertical_scroll_state: ScrollbarState::default(),
+            vertical_scroll: 0,
+            scrolled_so_far: 0,
+            size: Size::default(),
         }
     }
 }
@@ -934,7 +987,7 @@ mod tests {
         }
         "#;
 
-        let mut app = App::new(data, None, None).unwrap();
+        let mut app = App::new(data, None, None, Size::default()).unwrap();
         let mut pairs = vec![];
         let lines_count = app.insert_data_to_tree(&mut pairs, &app.json, 0);
         app.lines_count = lines_count;
