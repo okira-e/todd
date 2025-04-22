@@ -16,7 +16,22 @@ fn main() -> color_eyre::Result<()> {
         exit(1);
     }
 
-    let file_path = args[1].clone();
+    let argument = args[1].clone();
+    
+    if argument == "--version" || argument == "-version" {
+        const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+        println!("Todd version {}", VERSION);
+        exit(0);
+    }
+
+    if argument.starts_with("-") {
+        println!("Usage: todd <file.json>");
+        exit(0);
+    }
+
+    
+    let file_path = argument;
     let mut file = match OpenOptions::new()
         .read(true)       // Allow reading
         .write(true)      // Allow writing
