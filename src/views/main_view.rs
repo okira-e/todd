@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect}, style::{Color, Style}, symbols::scrollbar, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation}, Frame
 };
 
-use crate::{actions::{CurrentScreen, CurrentlyEditing}, app::state::{App, ReportedMessageKinds}, ui::helpers::get_centered_rect};
+use crate::{actions::{CurrentScreen, CurrentlyEditing}, app::{App, ReportedMessageKinds}, helpers::get_centered_rect};
 
 
 impl<'a> App<'a> {

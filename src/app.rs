@@ -5,7 +5,7 @@ use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
-use crate::{actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction}, ui::widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
+use crate::{actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction}, widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
 
 
 #[derive(Debug, Clone, PartialEq)]

@@ -6,7 +6,7 @@ use ratatui::
     Frame
 ;
 
-use crate::app::state::App;
+use crate::app::App;
 
 impl<'a> App<'a> {
     /// Draws a view based on the state.

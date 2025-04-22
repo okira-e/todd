@@ -1,10 +1,14 @@
 use std::{env, fs::{self, OpenOptions}, io::Read, process::{self, exit}};
-use app::state::App;
+use app::App;
 
-mod app;
-mod ui;
-mod utils;
+mod events;
 mod actions;
+mod app;
+mod draw;
+mod helpers;
+mod views;
+mod widgets;
+mod utils;
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;

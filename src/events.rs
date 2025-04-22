@@ -2,7 +2,7 @@ use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction};
 
-use super::state::App;
+use super::app::App;
 
 
 impl<'a> App<'a> {
