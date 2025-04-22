@@ -60,21 +60,28 @@ impl<'a> App<'a> {
             for (i, mut pair) in pairs.into_iter().enumerate() {
                 let indentation_padding: String = (0..pair.indentation - 1).map(|_| "    ").collect();
 
+                // If the current indentation is smaller, then we went up in the json. Reset the array index.
+                if last_indentation > pair.indentation {
+                    last_indentation = pair.indentation;
+                    array_key_index = 0;
+                }
+                
+                // If the current indentation is equal, then we are in the same array. Increment the array index.
+                if pair.key == "" {
+                    if last_indentation != pair.indentation {
+                        last_indentation = pair.indentation;
+                        array_key_index = 0;
+                    }
+
+                    array_key_index += 1;
+                    pair.key = format!("{}", array_key_index);
+                }
+
                 let is_line_focused = self.line_at_cursor == i;
 
                 let mut line = Line::from(
                     match &pair.value { // A Line is returned here.
                         Some(value) => {
-                            if pair.key == "" {
-                                if last_indentation != pair.indentation {
-                                    last_indentation = pair.indentation;
-                                    array_key_index = 0;
-                                }
-
-                                array_key_index += 1;
-                                pair.key = format!("{}", array_key_index);
-                            }
-                            
                             let indentation_and_key_span = Span::from(format!("{}{}: ", indentation_padding, pair.key));
 
                             // Colorize the value part of the line/pair based on the type of the value. Kinda like syntax highlighting.
@@ -94,16 +101,6 @@ impl<'a> App<'a> {
                             indentation_and_key_span + value_span // Concatenating two `Span`s makeup a `Line`.
                         },
                         None => {
-                            if last_indentation != pair.indentation {
-                                last_indentation = pair.indentation;
-                                array_key_index = 0;
-                            }
-
-                            if pair.key == "" {
-                                array_key_index += 1;
-                                pair.key = format!("{}", array_key_index);
-                            }
-                            
                             // Match against if this key's value is an array or another object.
                             match pair.is_array_value {
                                 true => {
