@@ -4,6 +4,7 @@ use app::state::App;
 mod app;
 mod ui;
 mod utils;
+mod actions;
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;

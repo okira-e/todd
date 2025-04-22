@@ -5,10 +5,10 @@
 use std::rc::Rc;
 
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect}, style::{Color, Style}, symbols::scrollbar, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation}, Frame
 };
 
-use crate::{app::state::{App, CurrentScreen, CurrentlyEditing, ReportedMessageKinds}, ui::helpers::get_centered_rect};
+use crate::{actions::{CurrentScreen, CurrentlyEditing}, app::state::{App, ReportedMessageKinds}, ui::helpers::get_centered_rect};
 
 
 impl<'a> App<'a> {
@@ -149,6 +149,20 @@ impl<'a> App<'a> {
         };
 
         frame.render_widget(list_paragraph_widget, layout[0]);
+
+        // Render the scrollbar.
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .symbols(scrollbar::VERTICAL)
+                .begin_symbol(None)
+                .track_symbol(None)
+                .end_symbol(None),
+            layout[0].inner(Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut self.vertical_scroll_state,
+        );
     }
     
     fn draw_footer_widget(&self, frame: &mut Frame, layout: &Rc<[Rect]>) {
@@ -191,7 +205,7 @@ impl<'a> App<'a> {
                     },
                     Span::from(format!(", Parent length: {}", root_len)),
                     Span::from(format!(", Total lines: {}", self.lines_count)),
-                    Span::from(format!(", Current line: {}", self.line_at_cursor + 1)),
+                    Span::from(format!(", Current line: {}", self.line_at_cursor.saturating_add(1))),
                 ])
             )
             .block(

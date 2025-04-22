@@ -5,21 +5,8 @@ use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
-use crate::{ui::widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
+use crate::{actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction}, ui::widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
 
-
-#[derive(Debug)]
-pub enum CurrentScreen {
-    ViewingFile,
-    Editing,
-    // Exiting,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum CurrentlyEditing {
-    Key,
-    Value,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValuePair {
@@ -29,50 +16,6 @@ pub struct ValuePair {
     pub is_array_value: bool,
 }
 
-pub enum Action {
-    AppNavigation(AppNavigationAction),
-    MainView(MainViewActions),
-    Editing(EditingAction),
-    App(SystemAction),
-}
-
-pub enum AppNavigationAction {
-    ToViewingScreen,
-    ToEditingScreen,
-}
-
-pub enum MainViewActions{
-    MoveDown,
-    MoveUp,
-    MoveToTop,
-    MoveToBottom,
-    MoveHalfPageDown,
-    MoveHalfPageUp,
-}
-
-#[allow(dead_code)]
-pub enum EditingAction {
-    SwitchToKey,
-    SwitchToValue,
-    AppendChar(char),
-    AppendToKey(char),
-    AppendToValue(char),
-    MoveCursor(CursorDirection),
-    PopFromKey,
-    PopFromValue,
-    Submit,
-}
-
-pub enum CursorDirection {
-    Left,
-    // Up,
-    Right,
-    // Down,
-}
-
-pub enum SystemAction {
-    Quit,
-}
 
 #[derive(Debug)]
 pub struct ReportedMessage {
@@ -446,6 +389,10 @@ impl<'a> App<'a> {
     fn handle_main_view_messages(&mut self, action: MainViewActions) {
         let scroll_offset = 5;
 
+        fn set_vertical_scroll_state(scroll_state: &mut ScrollbarState, scroll: usize, viewport_lines_count: usize) {
+            *scroll_state = scroll_state.position(scroll + if scroll != 0 { viewport_lines_count / 2 } else { 0 });
+        }
+
         match action {
             MainViewActions::MoveDown => {
                 if self.line_at_cursor + 1 < self.lines_count {
@@ -453,6 +400,7 @@ impl<'a> App<'a> {
 
                     if self.is_current_line_at_viewport_end_with_offset(Some(scroll_offset)) {
                         self.vertical_scroll += 1;
+                        set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
                         self.scrolled_so_far += 1;
                     }
                 }
@@ -462,6 +410,7 @@ impl<'a> App<'a> {
                 
                 if self.is_current_line_at_viewport_start_with_offset(Some(scroll_offset)) {
                     self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
+                    set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
                     self.scrolled_so_far = self.scrolled_so_far.saturating_sub(1);
                 }
             }
@@ -472,6 +421,7 @@ impl<'a> App<'a> {
 
                 self.line_at_cursor = 0;
                 self.vertical_scroll = 0;
+                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
                 self.scrolled_so_far = 0;
             }
             MainViewActions::MoveToBottom => {
@@ -481,6 +431,7 @@ impl<'a> App<'a> {
 
                 self.line_at_cursor = self.lines_count.saturating_sub(1);
                 self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count);
+                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
                 self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count);
             }
             MainViewActions::MoveHalfPageDown => {
@@ -497,6 +448,8 @@ impl<'a> App<'a> {
                     self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
                     self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
                 }
+
+                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
             },
             MainViewActions::MoveHalfPageUp => {
                 if self.lines_count == 0 {
@@ -506,6 +459,7 @@ impl<'a> App<'a> {
                 if self.line_at_cursor > self.viewport_lines_count / 2 {
                     self.line_at_cursor = self.line_at_cursor.saturating_sub(self.viewport_lines_count / 2);
                     self.vertical_scroll = self.vertical_scroll.saturating_sub(self.viewport_lines_count / 2);
+                    set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
                     self.scrolled_so_far = self.scrolled_so_far.saturating_sub(self.viewport_lines_count / 2);
                 } else {
                     self.update(Action::MainView(MainViewActions::MoveToTop));
