@@ -38,14 +38,16 @@ impl<'a> App<'a> {
             self.json.as_array().unwrap().len()
         };
         
-        let list_paragraph_widget = if json_length == 0 {
-            Paragraph::new(
+        if json_length == 0 {
+            let list_paragraph_widget = Paragraph::new(
                 vec![
-                    Line::from(
-                        "Object is empty."
-                    ),
+                    Line::from("Object is empty."),
                 ],
-            )
+            );
+
+            let centered_layout = get_centered_rect(10, 10, layout[0]);
+            
+            frame.render_widget(list_paragraph_widget, centered_layout);
         } else {
             let mut pairs = vec![];
             let lines_count = self.insert_data_to_tree(&mut pairs, &self.json, 0);
@@ -174,12 +176,12 @@ impl<'a> App<'a> {
 
             self.vertical_scroll_state = self.vertical_scroll_state.content_length(lines.len());
             
-            Paragraph::new(lines)
+            let list_paragraph_widget = Paragraph::new(lines)
                 .block(Block::default().padding(Padding::horizontal(2)))
-                .scroll((self.vertical_scroll as u16, 0))
+                .scroll((self.vertical_scroll as u16, 0));
+            
+            frame.render_widget(list_paragraph_widget, layout[0]);
         };
-
-        frame.render_widget(list_paragraph_widget, layout[0]);
 
         // Render the scrollbar.
         frame.render_stateful_widget(
