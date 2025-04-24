@@ -1,0 +1,76 @@
+{
+    "features": {
+        "edit_prediction_provider": "zed"
+    },
+    "buffer_font_size": 14,
+    "git": {
+        "inline_blame": {
+            "enabled": false
+        }
+    },
+    "tab_size": 4,
+    "theme": "Focus Editor Inspired",
+    "extend_comment_on_newline": false,
+    "gutter": {
+        "folds": true,
+        "line_numbers": false
+    },
+    "vertical_scroll_margin": 10,
+    "scrollbar": {
+        "show": "never"
+    },
+    "show_edit_predictions": false,
+    "show_completions_on_input": false,
+    "auto_signature_help": false,
+    "indent_guides": {
+        "enabled": false
+    },
+    "hide_mouse": "never",
+    "cursor_shape": "block",
+    "cursor_blink": false,
+    "current_line_highlight": "none",
+    "preferred_line_length": 80,
+    "soft_wrap": "editor_width",
+    "vim_mode": true,
+    "vim": {
+        "toggle_relative_line_numbers": true,
+        "highlight_on_yank_duration": 100,
+        "use_system_clipboard": "never",
+        "use_smartcase_find": true
+    },
+    "tab_bar": {
+        "show": false,
+        "show_nav_history_buttons": false
+    },
+    "preview_tabs": {
+        "enabled": false
+    },
+    "toolbar": {
+        "quick_actions": false,
+        "selections_menu": false
+    },
+    "format_on_save": "off",
+    "buffer_font_features": {
+        "calt": false
+    },
+    "ui_font_size": 14,
+    "buffer_font_family": "JetBrains Mono",
+    "terminal": {
+        "font_size": 13,
+        "default_height": 1100
+   },
+    "buffer_line_height": "standard",
+    "base_keymap": "JetBrains",
+    "enable_language_server": true,
+    "telemetry": {
+        "diagnostics": true,
+        "metrics": true
+    },
+    "autosave": "on_focus_change",
+    "use_autoclose": false,
+    "remove_trailing_whitespace_on_save": false,
+    "ensure_final_newline_on_save": false,
+    "confirm_quit": true,
+    "auto_update": true
+}
+
