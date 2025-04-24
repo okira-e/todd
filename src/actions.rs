@@ -1,28 +1,18 @@
-#[derive(Debug)]
-pub enum CurrentScreen {
-    ViewingFile,
-    Editing,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum CurrentlyEditing {
-    Key,
-    Value,
-}
-
 pub enum Action {
     AppNavigation(AppNavigationAction),
     MainView(MainViewActions),
     Editing(EditingAction),
+    Searching(SearchingActions),
     App(SystemAction),
 }
 
 pub enum AppNavigationAction {
     ToViewingScreen,
     ToEditingScreen,
+    ToSearchingWidget,
 }
 
-pub enum MainViewActions{
+pub enum MainViewActions {
     MoveDown,
     MoveUp,
     MoveToTop,
@@ -31,7 +21,6 @@ pub enum MainViewActions{
     MoveHalfPageUp,
 }
 
-#[allow(dead_code)]
 pub enum EditingAction {
     SwitchToKey,
     SwitchToValue,
@@ -42,6 +31,16 @@ pub enum EditingAction {
     PopFromKey,
     PopFromValue,
     Submit,
+}
+
+pub enum SearchingActions {
+    AppendChar(char),
+    MoveCursor(CursorDirection),
+    PopChar,
+    ClearSearch,
+    GoToPrevMatch,
+    GoToNextMatch,
+    ClearMatches,
 }
 
 pub enum CursorDirection {

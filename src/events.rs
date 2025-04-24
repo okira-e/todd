@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crate::actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction};
+use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingActions, SystemAction}, app::{CurrentScreen, CurrentlyEditing}};
 
 use super::app::App;
 
@@ -50,6 +50,19 @@ impl<'a> App<'a> {
                     (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::CONTROL, KeyCode::Char('v')) => {
                         self.update(Action::MainView(MainViewActions::MoveHalfPageUp));
                     }
+                    (_, KeyCode::Char('n')) => {
+                        self.update(Action::Searching(SearchingActions::GoToNextMatch));
+                    }
+                    (KeyModifiers::SHIFT, KeyCode::Char('N')) => {
+                        self.update(Action::Searching(SearchingActions::GoToPrevMatch));
+                    }
+                    (_, KeyCode::Char('/')) => {
+                        self.update(Action::Searching(SearchingActions::ClearSearch));
+                        self.update(Action::AppNavigation(AppNavigationAction::ToSearchingWidget));
+                    }
+                    (_, KeyCode::Esc) => {
+                        self.update(Action::Searching(SearchingActions::ClearSearch));
+                    }
                     _ => { }
                 }
             }
@@ -94,6 +107,32 @@ impl<'a> App<'a> {
                 (_, KeyCode::Right) => {
                     self.update(Action::Editing(EditingAction::MoveCursor(CursorDirection::Right)));
                 }
+                _ => {
+                    {}
+                }
+            }
+            
+            CurrentScreen::Searching => match (key.modifiers, key.code) {
+                (_, KeyCode::Backspace) => {
+                    self.update(Action::Searching(SearchingActions::PopChar));
+                }
+                
+                (_, KeyCode::Esc) | (_, KeyCode::Enter) => {
+                    self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
+                }
+                
+                (_, KeyCode::Left) => {
+                    self.update(Action::Searching(SearchingActions::MoveCursor(CursorDirection::Left)));
+                }
+
+                (_, KeyCode::Right) => {
+                    self.update(Action::Searching(SearchingActions::MoveCursor(CursorDirection::Right)));
+                }
+                
+                (_, KeyCode::Char(value)) => {
+                    self.update(Action::Searching(SearchingActions::AppendChar(value)));
+                }
+                
                 _ => {
                     {}
                 }

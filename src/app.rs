@@ -5,8 +5,20 @@ use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
-use crate::{actions::{Action, AppNavigationAction, CurrentScreen, CurrentlyEditing, CursorDirection, EditingAction, MainViewActions, SystemAction}, widgets::text_input::TextInput, utils::json::get_nested_object_to_insert_into};
+use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingActions, SystemAction}, utils::json::get_nested_object_to_insert_into, widgets::text_input::TextInput};
 
+#[derive(Debug)]
+pub enum CurrentScreen {
+    ViewingFile,
+    Editing,
+    Searching,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CurrentlyEditing {
+    Key,
+    Value,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValuePair {
@@ -43,6 +55,10 @@ pub struct App<'a> {
     pub key_input: TextInput,
     /// The currently being edited json value.
     pub value_input: TextInput,
+    /// The search input widget.
+    pub search_widget: TextInput,
+    /// If there is an active search, this data structure saves all matches found by their (rendered) line numbers.
+    pub search_matches: Vec<usize>,
     /// The representation of the json file data. It could be an array or an object at the top level.
     pub json: Value,
     /// Holds all the pairs serialized out of the JSON. Has empty pairs to represent a line separator 
@@ -108,9 +124,10 @@ impl<'a> App<'a> {
 
     pub fn update(&mut self, action: Action) {
         match action {
-            Action::AppNavigation(action) => self.handle_navigation_actions(action),
+            Action::AppNavigation(action) => self.handle_app_navigation_actions(action),
             Action::MainView(action) => self.handle_main_view_messages(action),
             Action::Editing(action) => self.handle_editing_actions(action),
+            Action::Searching(action) => self.handle_searching_actions(action),
             Action::App(action) => self.handle_app_actions(action),
         }
     }
@@ -370,7 +387,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn handle_navigation_actions(&mut self, action: AppNavigationAction) {
+    fn handle_app_navigation_actions(&mut self, action: AppNavigationAction) {
         match action {
             AppNavigationAction::ToViewingScreen => {
                 self.key_input.is_focused = false;
@@ -383,15 +400,19 @@ impl<'a> App<'a> {
             AppNavigationAction::ToEditingScreen => {
                 self.toggle_editing();
             },
+            AppNavigationAction::ToSearchingWidget => {
+                self.current_screen = CurrentScreen::Searching;
+            },
         }
+    }
+    
+    // Call this when you update `self.vertical_scroll`. It updates the scrollbar state accordingly without borrowing Self.
+    fn set_vertical_scroll_state(scroll_state: &mut ScrollbarState, scroll: usize, viewport_lines_count: usize) {
+        *scroll_state = scroll_state.position(scroll + if scroll != 0 { viewport_lines_count / 2 } else { 0 });
     }
     
     fn handle_main_view_messages(&mut self, action: MainViewActions) {
         let scroll_offset = 5;
-
-        fn set_vertical_scroll_state(scroll_state: &mut ScrollbarState, scroll: usize, viewport_lines_count: usize) {
-            *scroll_state = scroll_state.position(scroll + if scroll != 0 { viewport_lines_count / 2 } else { 0 });
-        }
 
         match action {
             MainViewActions::MoveDown => {
@@ -400,8 +421,8 @@ impl<'a> App<'a> {
 
                     if self.is_current_line_at_viewport_end_with_offset(Some(scroll_offset)) {
                         self.vertical_scroll += 1;
-                        set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
-                        self.scrolled_so_far += 1;
+                        App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                        self.scrolled_so_far = self.vertical_scroll;
                     }
                 }
             }
@@ -410,8 +431,8 @@ impl<'a> App<'a> {
                 
                 if self.is_current_line_at_viewport_start_with_offset(Some(scroll_offset)) {
                     self.vertical_scroll = self.vertical_scroll.saturating_sub(1);
-                    set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
-                    self.scrolled_so_far = self.scrolled_so_far.saturating_sub(1);
+                    App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                    self.scrolled_so_far = self.vertical_scroll;
                 }
             }
             MainViewActions::MoveToTop => {
@@ -421,8 +442,8 @@ impl<'a> App<'a> {
 
                 self.line_at_cursor = 0;
                 self.vertical_scroll = 0;
-                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
-                self.scrolled_so_far = 0;
+                App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                self.scrolled_so_far = self.vertical_scroll;
             }
             MainViewActions::MoveToBottom => {
                 if self.lines_count == 0 {
@@ -431,8 +452,8 @@ impl<'a> App<'a> {
 
                 self.line_at_cursor = self.lines_count.saturating_sub(1);
                 self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count);
-                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
-                self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count);
+                App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                self.scrolled_so_far = self.vertical_scroll;
             }
             MainViewActions::MoveHalfPageDown => {
                 if self.lines_count == 0 {
@@ -446,10 +467,10 @@ impl<'a> App<'a> {
                 } else {
                     self.line_at_cursor += self.lines_count - self.line_at_cursor - 1;
                     self.vertical_scroll = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
-                    self.scrolled_so_far = self.lines_count.saturating_sub(self.viewport_lines_count - (self.viewport_lines_count / 2));
+                    self.scrolled_so_far = self.vertical_scroll;
                 }
 
-                set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
             },
             MainViewActions::MoveHalfPageUp => {
                 if self.lines_count == 0 {
@@ -459,8 +480,8 @@ impl<'a> App<'a> {
                 if self.line_at_cursor > self.viewport_lines_count / 2 {
                     self.line_at_cursor = self.line_at_cursor.saturating_sub(self.viewport_lines_count / 2);
                     self.vertical_scroll = self.vertical_scroll.saturating_sub(self.viewport_lines_count / 2);
-                    set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
-                    self.scrolled_so_far = self.scrolled_so_far.saturating_sub(self.viewport_lines_count / 2);
+                    App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                    self.scrolled_so_far = self.vertical_scroll;
                 } else {
                     self.update(Action::MainView(MainViewActions::MoveToTop));
                 }
@@ -508,10 +529,10 @@ impl<'a> App<'a> {
                 }
             }
             EditingAction::AppendToKey(c) => {
-                self.key_input.enter_char(c);
+                self.key_input.append_char(c);
             },
             EditingAction::AppendToValue(c) => {
-                self.value_input.enter_char(c);
+                self.value_input.append_char(c);
             },
             EditingAction::PopFromKey => {
                 if self.key_input.is_focused {
@@ -526,6 +547,107 @@ impl<'a> App<'a> {
             EditingAction::Submit => {
                 self.insert_new_data_from_user_input();
             },
+        }
+    }
+    
+    fn handle_searching_actions(&mut self, action: SearchingActions) {
+        match action {
+            SearchingActions::AppendChar(c) => {
+                self.update(Action::Searching(SearchingActions::ClearMatches)); // Clear previous matches before the new ones with the new character.
+                self.search_widget.append_char(c);
+            }
+            SearchingActions::MoveCursor(direction) => {
+                match direction {
+                    CursorDirection::Left => {
+                        self.search_widget.move_cursor_left();
+                    },
+                    CursorDirection::Right => {
+                        self.search_widget.move_cursor_right();
+                    },
+                }
+            }
+            SearchingActions::PopChar => {
+                self.search_widget.delete_char();
+            },
+            SearchingActions::ClearSearch => {
+                self.search_widget.clear();
+                self.search_matches = vec![];
+            }
+            SearchingActions::GoToNextMatch => {
+                if self.search_widget.content().is_empty() {
+                    return;
+                }
+                
+                let mut found = false;
+                for (i, line_match) in self.search_matches.iter().enumerate() {
+                    if self.line_at_cursor < *line_match {
+                        found = true;
+
+                        let line_diff = line_match.saturating_sub(self.vertical_scroll);
+                        if line_diff > (self.viewport_lines_count.saturating_sub(self.viewport_lines_count / 4)) {
+                            self.vertical_scroll += line_diff.saturating_sub(self.viewport_lines_count / 2);
+                            App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                            self.scrolled_so_far = self.vertical_scroll;
+                        }
+
+                        self.line_at_cursor = *line_match;
+
+                        self.report(
+                            format!("Found match {} out of {}", i + 1, self.search_matches.len()),
+                            ReportedMessageKinds::Info,
+                            Duration::from_secs(1)
+                        );
+                        
+                        break;
+                    }
+                }
+                
+                if !found {
+                    self.report(
+                        format!("No more matches"),
+                        ReportedMessageKinds::Error,
+                        Duration::from_secs(1)
+                    );
+                }
+            }
+            SearchingActions::GoToPrevMatch => {
+                if self.search_widget.content().is_empty() {
+                    return;
+                }
+                
+                let mut found = false;
+                for (i, line_match) in self.search_matches.iter().rev().enumerate() {
+                    if self.line_at_cursor > *line_match {
+                        found = true;
+
+                        // let line_diff = self.line_at_cursor.saturating_sub(*line_match);
+                        self.vertical_scroll = line_match.saturating_sub(self.viewport_lines_count / 2);
+                        App::set_vertical_scroll_state(&mut self.vertical_scroll_state, self.vertical_scroll, self.viewport_lines_count);
+                        self.scrolled_so_far = self.vertical_scroll;
+
+                        self.line_at_cursor = *line_match;
+
+                        self.report(
+                            format!("Found match {} out of {}", self.search_matches.len() - i, self.search_matches.len()),
+                            ReportedMessageKinds::Info,
+                            Duration::from_secs(1)
+                        );
+                        
+                        break;
+                    }
+                }
+                
+                if !found {
+                    self.report(
+                        format!("No previous matches"),
+                        ReportedMessageKinds::Error,
+                        Duration::from_secs(1)
+                    );
+                }
+            }
+            SearchingActions::ClearMatches => {
+                self.search_matches.clear();
+            }
         }
     }
 
@@ -600,6 +722,8 @@ impl Default for App<'_> {
             running: false,
             key_input: TextInput::new(Some("Key")),
             value_input: TextInput::new(Some("Value")),
+            search_widget: TextInput::new(Some("Look For")),
+            search_matches: vec![],
             json: Value::default(),
             lines_count: 0,
             viewport_lines_count: 0,
