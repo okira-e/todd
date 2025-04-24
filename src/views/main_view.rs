@@ -210,7 +210,7 @@ impl<'a> App<'a> {
         match self.current_screen {
             CurrentScreen::ViewingFile => {
                 let span = Span::from(
-                    "(q) to quit / (i) to make new pair",
+                    "(q) to quit, (i) to make new pair, (/) to search",
                 );
                 
                 let paragraph = Paragraph::new(
