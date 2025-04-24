@@ -58,12 +58,19 @@ fn main() -> color_eyre::Result<()> {
     
     let terminal = ratatui::init();
 
-    let app = App::new(
+    let app = match App::new(
         &file_content, 
         Some(file_metadata), 
         Some(&mut file),
         terminal.size().unwrap().clone(),
-    )?;
+    ) {
+        Ok(app) => app,
+        Err(err) => {
+            ratatui::restore();
+            eprintln!("Failed to create app: {}", err);
+            exit(1);
+        }
+    };
 
     let app_result = app.run(terminal);
     

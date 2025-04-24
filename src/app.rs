@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fs::{File, Metadata}, io::Seek, time::{Duration, Instant}};
 
-use color_eyre::Result;
+use color_eyre::{eyre::bail, Result};
 use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
@@ -98,7 +98,10 @@ impl<'a> App<'a> {
     ) -> Result<Self> {
         let mut app = Self::default();
 
-        let json = serde_json::from_str(json_content)?;
+        let json = match serde_json::from_str(json_content) {
+            Ok(value) => value,
+            Err(err) => bail!("Failed to parse JSON: {}", err)
+        };
         app.json = json;
         app.file_metadata = file_metadata;
         app.file = file;
