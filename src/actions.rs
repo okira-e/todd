@@ -2,7 +2,7 @@ pub enum Action {
     AppNavigation(AppNavigationAction),
     MainView(MainViewActions),
     Editing(EditingAction),
-    Searching(SearchingActions),
+    Searching(SearchingAction),
     App(SystemAction),
 }
 
@@ -33,7 +33,7 @@ pub enum EditingAction {
     Submit,
 }
 
-pub enum SearchingActions {
+pub enum SearchingAction {
     AppendChar(char),
     MoveCursor(CursorDirection),
     PopChar,
@@ -41,6 +41,7 @@ pub enum SearchingActions {
     GoToPrevMatch,
     GoToNextMatch,
     ClearMatches,
+    ReportResults,
 }
 
 pub enum CursorDirection {

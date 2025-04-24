@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingActions, SystemAction}, app::{CurrentScreen, CurrentlyEditing}};
+use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingAction, SystemAction}, app::{CurrentScreen, CurrentlyEditing}};
 
 use super::app::App;
 
@@ -51,17 +51,17 @@ impl<'a> App<'a> {
                         self.update(Action::MainView(MainViewActions::MoveHalfPageUp));
                     }
                     (_, KeyCode::Char('n')) => {
-                        self.update(Action::Searching(SearchingActions::GoToNextMatch));
+                        self.update(Action::Searching(SearchingAction::GoToNextMatch));
                     }
                     (KeyModifiers::SHIFT, KeyCode::Char('N')) => {
-                        self.update(Action::Searching(SearchingActions::GoToPrevMatch));
+                        self.update(Action::Searching(SearchingAction::GoToPrevMatch));
                     }
                     (_, KeyCode::Char('/')) => {
-                        self.update(Action::Searching(SearchingActions::ClearSearch));
+                        self.update(Action::Searching(SearchingAction::ClearSearch));
                         self.update(Action::AppNavigation(AppNavigationAction::ToSearchingWidget));
                     }
                     (_, KeyCode::Esc) => {
-                        self.update(Action::Searching(SearchingActions::ClearSearch));
+                        self.update(Action::Searching(SearchingAction::ClearSearch));
                     }
                     _ => { }
                 }
@@ -114,23 +114,28 @@ impl<'a> App<'a> {
             
             CurrentScreen::Searching => match (key.modifiers, key.code) {
                 (_, KeyCode::Backspace) => {
-                    self.update(Action::Searching(SearchingActions::PopChar));
+                    self.update(Action::Searching(SearchingAction::PopChar));
                 }
                 
-                (_, KeyCode::Esc) | (_, KeyCode::Enter) => {
+                (_, KeyCode::Esc) => {
+                    self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
+                }
+                
+                (_, KeyCode::Enter) => {
+                    self.update(Action::Searching(SearchingAction::ReportResults));
                     self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
                 }
                 
                 (_, KeyCode::Left) => {
-                    self.update(Action::Searching(SearchingActions::MoveCursor(CursorDirection::Left)));
+                    self.update(Action::Searching(SearchingAction::MoveCursor(CursorDirection::Left)));
                 }
 
                 (_, KeyCode::Right) => {
-                    self.update(Action::Searching(SearchingActions::MoveCursor(CursorDirection::Right)));
+                    self.update(Action::Searching(SearchingAction::MoveCursor(CursorDirection::Right)));
                 }
                 
                 (_, KeyCode::Char(value)) => {
-                    self.update(Action::Searching(SearchingActions::AppendChar(value)));
+                    self.update(Action::Searching(SearchingAction::AppendChar(value)));
                 }
                 
                 _ => {

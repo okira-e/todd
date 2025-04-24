@@ -5,7 +5,7 @@ use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
-use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingActions, SystemAction}, utils::json::get_nested_object_to_insert_into, widgets::text_input::TextInput};
+use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingAction, SystemAction}, utils::json::get_nested_object_to_insert_into, widgets::text_input::TextInput};
 
 #[derive(Debug)]
 pub enum CurrentScreen {
@@ -550,13 +550,13 @@ impl<'a> App<'a> {
         }
     }
     
-    fn handle_searching_actions(&mut self, action: SearchingActions) {
+    fn handle_searching_actions(&mut self, action: SearchingAction) {
         match action {
-            SearchingActions::AppendChar(c) => {
-                self.update(Action::Searching(SearchingActions::ClearMatches)); // Clear previous matches before the new ones with the new character.
+            SearchingAction::AppendChar(c) => {
+                self.update(Action::Searching(SearchingAction::ClearMatches)); // Clear previous matches before the new ones with the new character.
                 self.search_widget.append_char(c);
             }
-            SearchingActions::MoveCursor(direction) => {
+            SearchingAction::MoveCursor(direction) => {
                 match direction {
                     CursorDirection::Left => {
                         self.search_widget.move_cursor_left();
@@ -566,14 +566,14 @@ impl<'a> App<'a> {
                     },
                 }
             }
-            SearchingActions::PopChar => {
+            SearchingAction::PopChar => {
                 self.search_widget.delete_char();
             },
-            SearchingActions::ClearSearch => {
+            SearchingAction::ClearSearch => {
                 self.search_widget.clear();
                 self.search_matches = vec![];
             }
-            SearchingActions::GoToNextMatch => {
+            SearchingAction::GoToNextMatch => {
                 if self.search_widget.content().is_empty() {
                     return;
                 }
@@ -593,7 +593,7 @@ impl<'a> App<'a> {
                         self.line_at_cursor = *line_match;
 
                         self.report(
-                            format!("Found match {} out of {}", i + 1, self.search_matches.len()),
+                            format!("Match {} out of {}", i + 1, self.search_matches.len()),
                             ReportedMessageKinds::Info,
                             Duration::from_secs(1)
                         );
@@ -610,7 +610,7 @@ impl<'a> App<'a> {
                     );
                 }
             }
-            SearchingActions::GoToPrevMatch => {
+            SearchingAction::GoToPrevMatch => {
                 if self.search_widget.content().is_empty() {
                     return;
                 }
@@ -628,7 +628,7 @@ impl<'a> App<'a> {
                         self.line_at_cursor = *line_match;
 
                         self.report(
-                            format!("Found match {} out of {}", self.search_matches.len() - i, self.search_matches.len()),
+                            format!("Match {} out of {}", self.search_matches.len() - i, self.search_matches.len()),
                             ReportedMessageKinds::Info,
                             Duration::from_secs(1)
                         );
@@ -645,8 +645,15 @@ impl<'a> App<'a> {
                     );
                 }
             }
-            SearchingActions::ClearMatches => {
+            SearchingAction::ClearMatches => {
                 self.search_matches.clear();
+            }
+            SearchingAction::ReportResults => {
+                self.report(
+                    format!("Found {} matches", self.search_matches.len()),
+                    ReportedMessageKinds::Info,
+                    Duration::from_secs(1)
+                );
             }
         }
     }
