@@ -11,11 +11,11 @@ Binaries are provided in the Releases section. If your target computer isn't cov
 todd my_file.json
 ```
 
-## KeyMap
+## Keymap
 
 ### Movement
-- `j | <Down> | <C-n>`: Moves down one task
-- `k | <Up> | <C-p>`: Moves up one task
+- `j | <Down> | <C-n>`: Moves down one line
+- `k | <Up> | <C-p>`: Moves up one line
 - `/`: Puts the focus on a searching widget where you can lookup anything in the file (case insensitive)
 - `n`: Move to the next match if a search has been applied
 - `N`: Move to the previous match if a search has been applied
