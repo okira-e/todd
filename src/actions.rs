@@ -31,6 +31,7 @@ pub enum EditingAction {
     PopFromKey,
     PopFromValue,
     Submit,
+    EditExisting,
 }
 
 pub enum SearchingAction {

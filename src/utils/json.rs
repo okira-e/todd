@@ -1,5 +1,102 @@
 use serde_json::Value;
 
+/// Gets the current value and key at the specified position in a JSON structure.
+///
+/// This function is used for editing existing values. It returns the parent container,
+/// the key (if in an object), the current value, and the index within the parent.
+///
+/// # Arguments
+///
+/// * `steps` - The position (zero-based) to locate in the JSON structure.
+/// * `obj` - The JSON value to traverse.
+///
+/// # Returns
+///
+/// A tuple containing:
+/// * `Option<&Value>` - The parent object/array containing the element at the specified position.
+/// * `Option<String>` - The key if the element is in an object, None if in an array.
+/// * `Option<&Value>` - The current value at the specified position.
+/// * `usize` - The index of the element within its parent.
+pub fn get_current_value_at_position(steps: usize, obj: &Value) -> (Option<&Value>, Option<String>, Option<&Value>, usize) {
+    fn find_value_path<'a>(current: &mut usize, target: usize, value: &'a Value) -> Option<(Vec<usize>, Option<String>, &'a Value)> {
+        return match value {
+            Value::Object(map) => {
+                for (i, (key, v)) in map.iter().enumerate() {
+                    if *current == target {
+                        return Some((vec![i], Some(key.clone()), v));
+                    }
+
+                    *current += 1;
+                    
+                    if v.is_object() || v.is_array() {
+                        if let Some((mut path, found_key, found_value)) = find_value_path(current, target, v) {
+                            path.insert(0, i);
+                            return Some((path, found_key, found_value));
+                        }
+                    }
+                }
+                None
+            },
+            Value::Array(arr) => {
+                for (i, v) in arr.iter().enumerate() {
+                    if *current == target && !v.is_object() && !v.is_array() {
+                        return Some((vec![i], None, v));
+                    }
+                    
+                    if v.is_object() || v.is_array() {
+                        if let Some((mut path, found_key, found_value)) = find_value_path(current, target, v) {
+                            path.insert(0, i);
+                            return Some((path, found_key, found_value));
+                        }
+                    } else {
+                        *current += 1;
+                    }
+                }
+                None
+            },
+            _ => None
+        };
+    }
+    
+    fn follow_path_to_parent<'a>(obj: &'a Value, path: &[usize]) -> Option<&'a Value> {
+        if path.is_empty() || path.len() == 1 {
+            return Some(obj);
+        }
+        
+        let index_at_the_root = path[0];
+        
+        match obj {
+            Value::Object(map) => {
+                let key = map.keys().nth(index_at_the_root);
+                if let Some(key) = key {
+                    if let Some(value) = map.get(key) {
+                        return follow_path_to_parent(value, &path[1..]);
+                    }
+                }
+            },
+            Value::Array(arr) => {
+                if index_at_the_root < arr.len() {
+                    if let Some(value) = arr.get(index_at_the_root) {
+                        return follow_path_to_parent(value, &path[1..]);
+                    }
+                }
+            },
+            _ => {}
+        }
+        
+        None
+    }
+    
+    let mut current = 0;
+    if let Some((path, key, value)) = find_value_path(&mut current, steps, obj) {
+        let parent = follow_path_to_parent(obj, &path);
+        let index = if path.is_empty() { 0 } else { path[path.len() - 1] };
+        return (parent, key, Some(value), index);
+    }
+    
+    (None, None, None, 0)
+}
+
 /// Finds a JSON element at a specific position within a nested JSON structure.
 ///
 /// This function traverses a JSON structure (containing objects and arrays) in a depth-first manner,

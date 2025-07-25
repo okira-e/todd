@@ -32,6 +32,9 @@ impl<'a> App<'a> {
                     (_, KeyCode::Char('i')) => {
                         self.update(Action::AppNavigation(AppNavigationAction::ToEditingScreen));
                     }
+                    (_, KeyCode::Char('e')) => {
+                        self.update(Action::Editing(EditingAction::EditExisting));
+                    }
                     (_, KeyCode::Char('j') | KeyCode::Down) | (KeyModifiers::CONTROL, KeyCode::Char('n')) => {
                         self.update(Action::MainView(MainViewActions::MoveDown));
                     }

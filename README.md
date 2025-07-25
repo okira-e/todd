@@ -26,6 +26,7 @@ todd my_file.json
 
 ### Actions
 - `i`: Opens the popup for inserting a new key/value pair or a single value if in an array
+- `e`: Edit an existing key/value pair or array value at the current cursor position
 - `q`: Quits the application
 
 ## Contributing

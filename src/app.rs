@@ -5,7 +5,7 @@ use ratatui::{layout::Size, widgets::ScrollbarState, DefaultTerminal}
 ;
 use serde_json::Value;
 
-use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingAction, SystemAction}, utils::json::get_nested_object_to_insert_into, widgets::text_input::TextInput};
+use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingAction, SystemAction}, utils::json::{get_nested_object_to_insert_into, get_current_value_at_position}, widgets::text_input::TextInput};
 
 #[derive(Debug)]
 pub enum CurrentScreen {
@@ -18,6 +18,12 @@ pub enum CurrentScreen {
 pub enum CurrentlyEditing {
     Key,
     Value,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum EditingMode {
+    Inserting,
+    Editing,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +75,8 @@ pub struct App<'a> {
     /// The optional state containing which of the key or value pair the user is editing. It is an option, 
     /// because when the user is not directly editing a key-value pair, this will be set to `None`.
     pub currently_editing: Option<CurrentlyEditing>,
+    /// Tracks whether we're inserting new data or editing existing data
+    pub editing_mode: EditingMode,
     /// Keeps track of where the current focused line is. Represents a line in the UI. So if the UI
     /// needs an empty line, you will find it at it. It doesn't represent the actual count of paris in the JSON.
     pub line_at_cursor: usize,
@@ -239,6 +247,214 @@ impl<'a> App<'a> {
         self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
     }
 
+    /// Starts editing an existing value at the current cursor position.
+    pub fn start_editing_existing_value(&mut self) {
+        // Check if we're on a line that has an actual value (not an object/array header)
+        if self.line_at_cursor >= self.json_pairs.len() {
+            self.report(
+                "No value to edit at current position".to_string(),
+                ReportedMessageKinds::Error,
+                Duration::from_secs(2)
+            );
+            return;
+        }
+
+        let current_pair = &self.json_pairs[self.line_at_cursor];
+        
+        // Can't edit object/array headers, only actual values
+        if current_pair.value.is_none() {
+            self.report(
+                "Cannot edit object or array headers".to_string(),
+                ReportedMessageKinds::Error,
+                Duration::from_secs(2)
+            );
+            return;
+        }
+
+        // Get the current value and key information
+        let (_, key, current_value, _) = get_current_value_at_position(
+            self.line_at_cursor_without_empty_lines(), 
+            &self.json
+        );
+
+        if let Some(value) = current_value {
+            // Set editing mode
+            self.editing_mode = EditingMode::Editing;
+            self.current_screen = CurrentScreen::Editing;
+
+            // Populate input fields with current values
+            if let Some(key) = key {
+                // We're editing a key-value pair in an object
+                self.key_input.set_content(&key);
+                self.currently_editing = Some(CurrentlyEditing::Key);
+                self.key_input.is_focused = true;
+                self.value_input.is_focused = false;
+            } else {
+                // We're editing a value in an array
+                self.key_input.clear();
+                self.currently_editing = Some(CurrentlyEditing::Value);
+                self.key_input.is_focused = false;
+                self.value_input.is_focused = true;
+            }
+
+            // Set the value input with the current value as a string
+            let value_str = match value {
+                Value::String(s) => s.clone(),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "null".to_string(),
+                _ => serde_json::to_string(value).unwrap_or_default()
+            };
+            self.value_input.set_content(&value_str);
+
+            self.report(
+                "Editing existing value".to_string(),
+                ReportedMessageKinds::Info,
+                Duration::from_secs(2)
+            );
+        } else {
+            self.report(
+                "Could not find value to edit".to_string(),
+                ReportedMessageKinds::Error,
+                Duration::from_secs(2)
+            );
+        }
+    }
+
+    /// Updates an existing value based on user input.
+    pub fn update_existing_data_from_user_input(&mut self) {
+        // Validate input
+        let is_array_item = self.is_inside_array();
+        
+        if is_array_item {
+            if self.value_input.content().to_string().is_empty() {
+                return;
+            }
+        } else {
+            if self.key_input.content().to_string().is_empty() || self.value_input.content().to_string().is_empty() {
+                return;
+            }
+        }
+
+        // Parse the new value
+        let new_value = serde_json::to_value(self.value_input.content()).unwrap();
+        let new_value: Value = match new_value {
+            Value::String(s) => {
+                if s.parse::<f64>().is_ok() {
+                    Value::Number(s.parse().unwrap())
+                } else if s.parse::<bool>().is_ok() {
+                    Value::Bool(s.parse().unwrap())
+                } else if s == "null" {
+                    Value::Null
+                } else {
+                    Value::String(s)
+                }
+            },
+            _ => new_value,
+        };
+
+        // Get the parent object and update the value
+        let (object_to_update, index) = get_nested_object_to_insert_into(
+            self.line_at_cursor_without_empty_lines(), 
+            &mut self.json
+        );
+
+        if let Some(object_to_update) = object_to_update {
+            match object_to_update {
+                Value::Object(map) => {
+                    // Get the key at the current index
+                    if let Some(old_key) = map.keys().nth(index).cloned() {
+                        let new_key = self.key_input.content().to_string();
+                        
+                        // If key changed, we need to remove old and insert new
+                        if old_key != new_key {
+                            map.shift_remove(&old_key);
+                            map.shift_insert(index, new_key.clone(), new_value.clone());
+                            
+                            self.report(
+                                format!("Updated key-value pair: {} -> {}", new_key, self.value_input.content()),
+                                ReportedMessageKinds::Success,
+                                Duration::from_secs(3)
+                            );
+                        } else {
+                            // Just update the value
+                            let old_key_clone = old_key.clone();
+                            map.insert(old_key, new_value.clone());
+                            
+                            self.report(
+                                format!("Updated value: {} -> {}", old_key_clone, self.value_input.content()),
+                                ReportedMessageKinds::Success,
+                                Duration::from_secs(3)
+                            );
+                        }
+                    }
+                },
+                Value::Array(values) => {
+                    if index < values.len() {
+                        values[index] = new_value.clone();
+                        
+                        self.report(
+                            format!("Updated array value: {}", self.value_input.content()),
+                            ReportedMessageKinds::Success,
+                            Duration::from_secs(3)
+                        );
+                    }
+                },
+                _ => {
+                    self.report(
+                        "Cannot update this value".to_string(),
+                        ReportedMessageKinds::Error,
+                        Duration::from_secs(3)
+                    );
+                    return;
+                }
+            }
+        } else {
+            self.report(
+                "Could not find parent to update value".to_string(),
+                ReportedMessageKinds::Error,
+                Duration::from_secs(3)
+            );
+            return;
+        }
+
+        // Save to file if available
+        if let Some(file) = self.file.as_mut() {
+            // Clear the file by truncating it to 0 bytes
+            if let Err(err) = file.set_len(0) {
+                self.report(
+                    format!("Failed to clear file: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+                return;
+            }
+            
+            // Reset file position to the beginning
+            if let Err(err) = file.seek(std::io::SeekFrom::Start(0)) {
+                self.report(
+                    format!("Failed to reset file position: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+                return;
+            }
+            
+            // Write the new JSON content directly to the file
+            if let Err(err) = serde_json::to_writer_pretty(file, &self.json) {
+                self.report(
+                    format!("Failed to save changes: {}", err), 
+                    ReportedMessageKinds::Error, 
+                    Duration::from_secs(3)
+                );
+            }
+        }
+
+        // Reset editing mode and return to viewing
+        self.editing_mode = EditingMode::Inserting;
+        self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
+    }
+
     pub fn toggle_editing(&mut self) {
         // Switch between key and value keys unless we're not on either then toggle to key.
         match &self.currently_editing {
@@ -246,18 +462,31 @@ impl<'a> App<'a> {
                 match edit_mode {
                     CurrentlyEditing::Key => {
                         self.currently_editing = Some(CurrentlyEditing::Value);
+                        self.key_input.is_focused = false;
+                        self.value_input.is_focused = true;
                     }
                     CurrentlyEditing::Value => {
                         // There is no key input to toggle into if we're inserting to an array.
                         if !self.is_inside_array() { 
                             self.currently_editing = Some(CurrentlyEditing::Key);
+                            self.key_input.is_focused = true;
+                            self.value_input.is_focused = false;
                         }
                     }
                 };
             }
             None => {
                 self.current_screen = CurrentScreen::Editing;
-                self.currently_editing = if !self.is_inside_array() { Some(CurrentlyEditing::Key) } else { Some(CurrentlyEditing::Value) };
+                self.editing_mode = EditingMode::Inserting;
+                if !self.is_inside_array() { 
+                    self.currently_editing = Some(CurrentlyEditing::Key);
+                    self.key_input.is_focused = true;
+                    self.value_input.is_focused = false;
+                } else { 
+                    self.currently_editing = Some(CurrentlyEditing::Value);
+                    self.key_input.is_focused = false;
+                    self.value_input.is_focused = true;
+                }
             }
         };
     }
@@ -396,6 +625,7 @@ impl<'a> App<'a> {
                 self.key_input.is_focused = false;
                 self.value_input.is_focused = false;
                 self.currently_editing = None;
+                self.editing_mode = EditingMode::Inserting;
                 self.key_input.clear();
                 self.value_input.clear();
                 self.current_screen = CurrentScreen::ViewingFile;
@@ -500,6 +730,9 @@ impl<'a> App<'a> {
             EditingAction::SwitchToValue => {
                 self.currently_editing = Some(CurrentlyEditing::Value);
             },
+            EditingAction::EditExisting => {
+                self.start_editing_existing_value();
+            },
             // @Cleanup: The below four events should be divided into KeyInput(InputAction)
             EditingAction::AppendChar(c) => {
                 if let Some(currently_editing) = &self.currently_editing {
@@ -548,7 +781,10 @@ impl<'a> App<'a> {
                 }
             },
             EditingAction::Submit => {
-                self.insert_new_data_from_user_input();
+                match self.editing_mode {
+                    EditingMode::Inserting => self.insert_new_data_from_user_input(),
+                    EditingMode::Editing => self.update_existing_data_from_user_input(),
+                }
             },
         }
     }
@@ -745,6 +981,7 @@ impl Default for App<'_> {
             }),
             current_screen: CurrentScreen::ViewingFile,
             currently_editing: None,
+            editing_mode: EditingMode::Inserting,
             line_at_cursor: 0,
             json_pairs: vec![],
             file_metadata: None,
@@ -1098,6 +1335,78 @@ mod tests {
                 app.line_at_cursor,
                 29,
             );
+        }
+    }
+
+    #[test]
+    fn test_editing_existing_values() {
+        let data = r#"
+        {
+            "name": "Jane Doe",
+            "age": 30,
+            "hobbies": ["reading", "coding"],
+            "active": true
+        }
+        "#;
+
+        let mut app = App::new(data, None, None, Size::default()).unwrap();
+        let mut pairs = vec![];
+        let lines_count = app.insert_data_to_tree(&mut pairs, &app.json, 0);
+        app.lines_count = lines_count;
+        app.json_pairs = pairs;
+
+        // Test editing a string value
+        {
+            app.line_at_cursor = 0; // "name": "Jane Doe"
+            app.start_editing_existing_value();
+
+            assert_eq!(app.editing_mode, EditingMode::Editing);
+            assert_eq!(app.key_input.content(), "name");
+            assert_eq!(app.value_input.content(), "Jane Doe");
+
+            // Change the value
+            app.key_input.set_content("full_name");
+            app.value_input.set_content("John Smith");
+            app.update_existing_data_from_user_input();
+
+            // Verify the change
+            let json_obj = app.json.as_object().unwrap();
+            assert_eq!(json_obj.get("full_name").unwrap().as_str().unwrap(), "John Smith");
+            assert!(json_obj.get("name").is_none());
+        }
+
+        // Test editing a number value
+        {
+            app.line_at_cursor = 1; // "age": 30
+            app.start_editing_existing_value();
+
+            assert_eq!(app.key_input.content(), "age");
+            assert_eq!(app.value_input.content(), "30");
+
+            // Change the value
+            app.value_input.set_content("25");
+            app.update_existing_data_from_user_input();
+
+            // Verify the change
+            let json_obj = app.json.as_object().unwrap();
+            assert_eq!(json_obj.get("age").unwrap().as_i64().unwrap(), 25);
+        }
+
+        // Test editing an array value
+        {
+            app.line_at_cursor = 3; // "reading" in hobbies array
+            app.start_editing_existing_value();
+
+            assert_eq!(app.value_input.content(), "reading");
+
+            // Change the value
+            app.value_input.set_content("writing");
+            app.update_existing_data_from_user_input();
+
+            // Verify the change
+            let json_obj = app.json.as_object().unwrap();
+            let hobbies = json_obj.get("hobbies").unwrap().as_array().unwrap();
+            assert_eq!(hobbies[0].as_str().unwrap(), "writing");
         }
     }
 }
