@@ -6,9 +6,10 @@ mod actions;
 mod app;
 mod draw;
 mod helpers;
-mod views;
+mod ui;
 mod widgets;
 mod utils;
+mod json_tree;
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;

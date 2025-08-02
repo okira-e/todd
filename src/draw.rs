@@ -2,9 +2,7 @@
 // Main app rendering entry point.
 //
 
-use ratatui::
-    Frame
-;
+use ratatui::Frame;
 
 use crate::app::App;
 

@@ -1,6 +1,8 @@
+use std::time::Duration;
+
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use crate::{actions::{Action, AppNavigationAction, CursorDirection, EditingAction, MainViewActions, SearchingAction, SystemAction}, app::{CurrentScreen, CurrentlyEditing}};
+use crate::{actions::{Action, AppAction, AppNavigationAction, CursorDirection, EditingAction, JsonTreeAction, SearchingAction}, app::{CurrentScreen, CurrentlyEditing, ReportedMessageKinds}};
 
 use super::app::App;
 
@@ -27,7 +29,7 @@ impl<'a> App<'a> {
             CurrentScreen::ViewingFile => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Char('q')) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                        self.update(Action::App(SystemAction::Quit));
+                        self.update(Action::App(AppAction::Quit));
                     }
                     (_, KeyCode::Char('i')) => {
                         self.update(Action::AppNavigation(AppNavigationAction::ToEditingScreen));
@@ -36,22 +38,22 @@ impl<'a> App<'a> {
                         self.update(Action::Editing(EditingAction::EditExisting));
                     }
                     (_, KeyCode::Char('j') | KeyCode::Down) | (KeyModifiers::CONTROL, KeyCode::Char('n')) => {
-                        self.update(Action::MainView(MainViewActions::MoveDown));
+                        self.update(Action::MainView(JsonTreeAction::MoveDown));
                     }
                     (_, KeyCode::Char('k') | KeyCode::Up) | (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
-                        self.update(Action::MainView(MainViewActions::MoveUp));
+                        self.update(Action::MainView(JsonTreeAction::MoveUp));
                     }
                     (_, KeyCode::Char('g')) => {
-                        self.update(Action::MainView(MainViewActions::MoveToTop));
+                        self.update(Action::MainView(JsonTreeAction::MoveToTop));
                     }
                     (_, KeyCode::Char('G')) => {
-                        self.update(Action::MainView(MainViewActions::MoveToBottom));
+                        self.update(Action::MainView(JsonTreeAction::MoveToBottom));
                     }
                     (KeyModifiers::CONTROL, KeyCode::Char('d')) | (KeyModifiers::META, KeyCode::Char('v')) => {
-                        self.update(Action::MainView(MainViewActions::MoveHalfPageDown));
+                        self.update(Action::MainView(JsonTreeAction::MoveHalfPageDown));
                     }
                     (KeyModifiers::CONTROL, KeyCode::Char('u')) | (KeyModifiers::CONTROL, KeyCode::Char('v')) => {
-                        self.update(Action::MainView(MainViewActions::MoveHalfPageUp));
+                        self.update(Action::MainView(JsonTreeAction::MoveHalfPageUp));
                     }
                     (_, KeyCode::Char('n')) => {
                         self.update(Action::Searching(SearchingAction::GoToNextMatch));
@@ -125,7 +127,11 @@ impl<'a> App<'a> {
                 }
                 
                 (_, KeyCode::Enter) => {
-                    self.update(Action::Searching(SearchingAction::ReportResults));
+                    self.report(
+                        format!("Found {} matches", self.search_matches.len()),
+                        ReportedMessageKinds::Info,
+                        Duration::from_secs(1),
+                    );
                     self.update(Action::AppNavigation(AppNavigationAction::ToViewingScreen));
                 }
                 
